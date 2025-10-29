@@ -1,3 +1,4 @@
 *sentiment_pipeline_sbert_linsvc.joblib filter=lfs diff=lfs merge=lfs -text
 sentiment_pipeline_sbert_linsvc.joblib filter=lfs diff=lfs merge=lfs -text
+.joblib filter=lfs diff=lfs merge=lfs -text
 *.joblib filter=lfs diff=lfs merge=lfs -text
