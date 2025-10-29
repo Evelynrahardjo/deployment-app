@@ -12,10 +12,4 @@ tqdm==4.66.5
 python-dateutil==2.9.0.post0
 googletrans==4.0.0-rc1
 imbalanced-learn==0.12.3
-sentence-transformers==2.7.0
-transformers==4.43.4
-huggingface-hub==0.24.6
-tokenizers==0.19.1
-safetensors==0.4.3
-torch==2.3.1
---extra-index-url https://download.pytorch.org/whl/cpu
+
