@@ -585,11 +585,23 @@ if pr_feature == "Sentiment":
         except Exception:
             return text
     # --- Guard untuk artefak joblib lama yang merefer ke submodul ST ---
-    import sentence_transformers  # register package di sys.modules
+    # ---- Compat shim untuk artefak lama yang menyimpan referensi 'sentence_transformers.model_card' ----
+    import sys, types
     try:
-        import sentence_transformers.model_card  # beberapa artefak lama merujuk modul ini
-    except Exception:
-        pass
+        import sentence_transformers  # pastikan package sudah ada
+        if 'sentence_transformers.model_card' not in sys.modules:
+            mc = types.ModuleType('sentence_transformers.model_card')
+    
+            class ModelCard:
+                def __init__(self, *args, **kwargs):
+                    for k, v in kwargs.items():
+                        setattr(self, k, v)
+    
+            mc.ModelCard = ModelCard
+            sys.modules['sentence_transformers.model_card'] = mc
+    except Exception as e:
+        print("Compat shim failed:", e)
+
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
