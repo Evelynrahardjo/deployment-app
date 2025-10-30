@@ -602,6 +602,39 @@ if pr_feature == "Sentiment":
     except Exception as e:
         print("Compat shim failed:", e)
 
+    # ==== Compat shim untuk artefak lama sentence-transformers (model_card) ====
+    import sys, types
+    try:
+        import sentence_transformers  # pastikan paket ada
+    
+        # Buat module dummy 'sentence_transformers.model_card' bila belum ada
+        if 'sentence_transformers.model_card' not in sys.modules:
+            mc = types.ModuleType('sentence_transformers.model_card')
+    
+            # Kelas dummy yang fleksibel utk objek yang di-unpickle
+            class _Flex:
+                def __init__(self, *args, **kwargs):
+                    # simpan semua kwargs sebagai atribut agar akses tidak error
+                    for k, v in kwargs.items():
+                        setattr(self, k, v)
+    
+                # kadang pickle memanggil getattr untuk field yang tak ada
+                def __getattr__(self, name):
+                    # kembalikan None jika atribut tidak ada (aman untuk baca saja)
+                    return None
+    
+            # Nama-nama yang biasa muncul di artefak lama
+            mc.ModelCard = _Flex
+            mc.SentenceTransformerModelCardData = _Flex
+    
+            # (opsional) kalau ada nama lain yang kadang ikut ter-pickle:
+            mc.CardData = _Flex
+            mc.Card = _Flex
+    
+            sys.modules['sentence_transformers.model_card'] = mc
+    
+    except Exception as e:
+        print("Compat shim (model_card) failed:", e)
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
