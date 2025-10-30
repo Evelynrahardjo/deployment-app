@@ -584,6 +584,12 @@ if pr_feature == "Sentiment":
             return tr.translate(text, dest="en").text
         except Exception:
             return text
+    # --- Guard untuk artefak joblib lama yang merefer ke submodul ST ---
+    import sentence_transformers  # register package di sys.modules
+    try:
+        import sentence_transformers.model_card  # beberapa artefak lama merujuk modul ini
+    except Exception:
+        pass
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
@@ -1463,7 +1469,7 @@ elif pr_feature == "Sentiment + Technical":
     translate_opt = st.toggle("🔁 Translate automatically to English (recommended)", value=True)
     run_predict_btn = st.button("🧪 Predict your News", use_container_width=True)
 
-    PATH_PIPELINE = "/content/sentiment_pipeline_sbert_linsvc.joblib"
+    PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
 
     # SBERT encoder (agar pipeline joblib yang berisi SBERTEncoder bisa dikenali)
     from sklearn.base import BaseEstimator, TransformerMixin
