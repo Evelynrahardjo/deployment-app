@@ -11,9 +11,13 @@ tqdm==4.66.5
 python-dateutil==2.9.0.post0
 googletrans==4.0.0-rc1
 imbalanced-learn==0.12.3
-sentence-transformers==2.7.0
+sentence-transformers==2.2.2
+transformers==4.36.2
+huggingface-hub==0.20.3
 torch==2.2.2
 torchvision==0.17.2
 torchaudio==2.2.2
+
+
 
 
