@@ -1391,7 +1391,7 @@ elif pr_feature == "Technical":
         return None, np.nan
 
     # ---------- Load data utama ----------
-    MASTER_PATH = "/content/result_df_streamlit.csv"
+    MASTER_PATH = repo_path("result_df_streamlit.csv")
     try:
         master_df_tech = _load_master_df_tech(MASTER_PATH)
         if "stocks_tech" not in st.session_state:
@@ -1447,10 +1447,11 @@ elif pr_feature == "Technical":
         # Cari Actual (Next Day) dari gabungan sumber harga
         next_day = (pd.to_datetime(win_end_local) + pd.Timedelta(days=1)).date()
         PRICE_PATHS = [
-            "/content/df_stock2.csv",                 # scraping terbaru
-            "/content/df_stock_fix_1April (1).csv",   # lama s/d 1 April
-            "/content/df_stock.csv"                   # fallback
+            repo_path("df_stock2.csv"),
+            repo_path("df_stock_fix_1April (1).csv"),
+            repo_path("df_stock.csv"),
         ]
+
         price_catalog = load_price_catalog(PRICE_PATHS)
         found_dt, actual_val = find_actual_and_trading_date(
             ticker=ticker_for_train,
@@ -2095,10 +2096,11 @@ elif pr_feature == "Sentiment + Technical":
             # Next-day actual dari katalog
             next_day = (pd.to_datetime(win_end_local) + pd.Timedelta(days=1)).date()
             PRICE_PATHS = [
-                "/content/df_stock2.csv",
-                "/content/df_stock_fix_1April (1).csv",
-                "/content/df_stock.csv"
+                repo_path("df_stock2.csv"),
+                repo_path("df_stock_fix_1April (1).csv"),
+                repo_path("df_stock.csv"),
             ]
+
             price_catalog = load_price_catalog(PRICE_PATHS)
             found_dt, actual_val = find_actual_and_trading_date(
                 ticker=ticker_for_train,
