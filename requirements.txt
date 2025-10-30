@@ -1,4 +1,6 @@
+# ===== Core app =====
 streamlit==1.38.0
+rich==13.9.4              # cegah auto-upgrade ke 14.x (tidak kompatibel dgn streamlit 1.38)
 pandas==2.2.2
 numpy==1.26.4
 scipy==1.11.4
@@ -11,17 +13,22 @@ tqdm==4.66.5
 python-dateutil==2.9.0.post0
 googletrans==4.0.0-rc1
 imbalanced-learn==0.12.3
+
+# ===== NLP / HF stack =====
 sentence-transformers==2.2.2
 transformers==4.36.2
-huggingface-hub==0.20.3
+huggingface-hub==0.21.4   # kompatibel utk transformers 4.36 & aman utk ST 2.2.2
+tokenizers==0.15.2
+sentencepiece>=0.1.99
 torch==2.2.2
 torchvision==0.17.2
 torchaudio==2.2.2
-datasets==2.19.1
-sentencepiece>=0.1.99
+
+# ===== Py3.12 compatibility =====
 setuptools==68.2.2
 packaging==24.0
 protobuf<5
+
 
 
 
