@@ -33,6 +33,47 @@ def repo_path(*parts: str) -> str:
     """Build absolute path safely for Streamlit Cloud or local."""
     return str(APP_DIR.joinpath(*parts))
 
+# ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
+import sys, types, importlib
+
+# 1) Shim untuk artefak lama sentence_transformers yang refer ke 'sentence_transformers.model_card'
+try:
+    import sentence_transformers  # pastikan paket ada
+    mc = sys.modules.get('sentence_transformers.model_card')
+    if mc is None:
+        mc = types.ModuleType('sentence_transformers.model_card')
+
+    class _Flex:
+        def __init__(self, *args, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+        def __getattr__(self, name):
+            return None  # serap atribut yang tidak ada biar unpickle aman
+
+    # Nama-nama yang kadang ada di artefak lama
+    setattr(mc, 'ModelCard', _Flex)
+    setattr(mc, 'SentenceTransformerModelCardData', _Flex)
+    setattr(mc, 'CardData', _Flex)
+    setattr(mc, 'Card', _Flex)
+    sys.modules['sentence_transformers.model_card'] = mc
+except Exception as e:
+    print("Compat shim (model_card) failed:", e)
+
+# 2) Alias kelas 'BertSdpa*' → ke kelas BERT standar yang ada di versi transformers sekarang
+try:
+    mb = importlib.import_module("transformers.models.bert.modeling_bert")
+    if not hasattr(mb, "BertSdpaSelfAttention") and hasattr(mb, "BertSelfAttention"):
+        class BertSdpaSelfAttention(mb.BertSelfAttention): ...
+        mb.BertSdpaSelfAttention = BertSdpaSelfAttention
+    if not hasattr(mb, "BertSdpaSelfOutput") and hasattr(mb, "BertSelfOutput"):
+        class BertSdpaSelfOutput(mb.BertSelfOutput): ...
+        mb.BertSdpaSelfOutput = BertSdpaSelfOutput
+    if not hasattr(mb, "BertSdpaAttention") and hasattr(mb, "BertAttention"):
+        class BertSdpaAttention(mb.BertAttention): ...
+        mb.BertSdpaAttention = BertSdpaAttention
+except Exception as e:
+    print("Compat shim (BERT SDPA) failed:", e)
+
 # =========================================
 # CONFIG & THEME
 # =========================================
@@ -639,14 +680,35 @@ if pr_feature == "Sentiment":
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        import joblib
+        import os, joblib, importlib
+    
+        # ---- JIT alias untuk kelas BERT SDPA (wajib sebelum joblib.load) ----
+        try:
+            mb = importlib.import_module("transformers.models.bert.modeling_bert")
+    
+            if not hasattr(mb, "BertSdpaSelfAttention") and hasattr(mb, "BertSelfAttention"):
+                class BertSdpaSelfAttention(mb.BertSelfAttention): ...
+                mb.BertSdpaSelfAttention = BertSdpaSelfAttention
+    
+            if not hasattr(mb, "BertSdpaSelfOutput") and hasattr(mb, "BertSelfOutput"):
+                class BertSdpaSelfOutput(mb.BertSelfOutput): ...
+                mb.BertSdpaSelfOutput = BertSdpaSelfOutput
+    
+            if not hasattr(mb, "BertSdpaAttention") and hasattr(mb, "BertAttention"):
+                class BertSdpaAttention(mb.BertAttention): ...
+                mb.BertSdpaAttention = BertSdpaAttention
+    
+        except Exception as _e:
+            print("Compat shim (BERT SDPA @loader) failed:", _e)
+    
+        # ---- Load pipeline .joblib ----
         if not os.path.exists(path_joblib):
             raise FileNotFoundError(
                 f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
+                "Pastikan artifact .joblib sudah diunggah."
             )
-        pipe = joblib.load(path_joblib)
-        return pipe
+        return joblib.load(path_joblib)
+
 
     def predict_sentiment(pipe, txt: str):
         pred = pipe.predict([txt])[0]
@@ -1566,15 +1628,29 @@ elif pr_feature == "Sentiment + Technical":
             return text
 
     @st.cache_resource(show_spinner=True)
+    @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        import joblib
+        import joblib, os
+        # ---- JIT patch (penting) ----
+        import importlib
+        try:
+            mb = importlib.import_module("transformers.models.bert.modeling_bert")
+            if not hasattr(mb, "BertSdpaSelfAttention") and hasattr(mb, "BertSelfAttention"):
+                class BertSdpaSelfAttention(mb.BertSelfAttention): ...
+                mb.BertSdpaSelfAttention = BertSdpaSelfAttention
+            if not hasattr(mb, "BertSdpaSelfOutput") and hasattr(mb, "BertSelfOutput"):
+                class BertSdpaSelfOutput(mb.BertSelfOutput): ...
+                mb.BertSdpaSelfOutput = BertSdpaSelfOutput
+            if not hasattr(mb, "BertSdpaAttention") and hasattr(mb, "BertAttention"):
+                class BertSdpaAttention(mb.BertAttention): ...
+                mb.BertSdpaAttention = BertSdpaAttention
+        except Exception as _e:
+            print("Compat shim (BERT SDPA @loader) failed:", _e)
+    
         if not os.path.exists(path_joblib):
-            raise FileNotFoundError(
-                f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
-            )
-        pipe = joblib.load(path_joblib)
-        return pipe
+            raise FileNotFoundError(f"File pipeline tidak ditemukan: {path_joblib}")
+        return joblib.load(path_joblib)
+
 
     def predict_sentiment(pipe, txt: str):
         pred = pipe.predict([txt])[0]
@@ -1937,7 +2013,8 @@ elif pr_feature == "Sentiment + Technical":
         return None, np.nan
 
     # === Load data utama ===
-    MASTER_PATH = "/content/result_df_streamlit.csv"
+    MASTER_PATH = repo_path("result_df_streamlit.csv")
+
     try:
         master_df_mix = _load_master_df_mix(MASTER_PATH)
         if "stocks_mix" not in st.session_state:
