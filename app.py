@@ -1340,7 +1340,8 @@ elif pr_feature == "Technical":
         return None, np.nan
 
     # ---------- Load data utama ----------
-    MASTER_PATH = "/content/result_df_streamlit.csv"
+    # MASTER_PATH = "/content/result_df_streamlit.csv"
+    MASTER_PATH = repo_path("result_df_streamlit.csv")
     try:
         master_df_tech = _load_master_df_tech(MASTER_PATH)
         if "stocks_tech" not in st.session_state:
@@ -1395,11 +1396,18 @@ elif pr_feature == "Technical":
 
         # Cari Actual (Next Day) dari gabungan sumber harga
         next_day = (pd.to_datetime(win_end_local) + pd.Timedelta(days=1)).date()
+        # PRICE_PATHS = [
+        #     "/content/df_stock2.csv",                 # scraping terbaru
+        #     "/content/df_stock_fix_1April (1).csv",   # lama s/d 1 April
+        #     "/content/df_stock.csv"                   # fallback
+        # ]
+
         PRICE_PATHS = [
-            "/content/df_stock2.csv",                 # scraping terbaru
-            "/content/df_stock_fix_1April (1).csv",   # lama s/d 1 April
-            "/content/df_stock.csv"                   # fallback
+                    repo_path("df_stock2.csv"),                 # hasil scrape
+                    repo_path("df_stock_fix_1April (1).csv"),   # data lama
+                    repo_path("df_stock.csv"),                  # opsional/fallback (kalau ada)
         ]
+
         price_catalog = load_price_catalog(PRICE_PATHS)
         found_dt, actual_val = find_actual_and_trading_date(
             ticker=ticker_for_train,
@@ -1464,7 +1472,8 @@ elif pr_feature == "Sentiment + Technical":
     translate_opt = st.toggle("🔁 Translate automatically to English (recommended)", value=True)
     run_predict_btn = st.button("🧪 Predict your News", use_container_width=True)
 
-    PATH_PIPELINE = "/content/sentiment_pipeline_sbert_linsvc.joblib"
+    # PATH_PIPELINE = "/content/sentiment_pipeline_sbert_linsvc.joblib"
+    PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
 
     # SBERT encoder (agar pipeline joblib yang berisi SBERTEncoder bisa dikenali)
     from sklearn.base import BaseEstimator, TransformerMixin
@@ -1885,7 +1894,8 @@ elif pr_feature == "Sentiment + Technical":
         return None, np.nan
 
     # === Load data utama ===
-    MASTER_PATH = "/content/result_df_streamlit.csv"
+    # MASTER_PATH = "/content/result_df_streamlit.csv"
+    MASTER_PATH = repo_path("result_df_streamlit.csv")
     try:
         master_df_mix = _load_master_df_mix(MASTER_PATH)
         if "stocks_mix" not in st.session_state:
@@ -2043,10 +2053,15 @@ elif pr_feature == "Sentiment + Technical":
 
             # Next-day actual dari katalog
             next_day = (pd.to_datetime(win_end_local) + pd.Timedelta(days=1)).date()
+            # PRICE_PATHS = [
+            #     "/content/df_stock2.csv",
+            #     "/content/df_stock_fix_1April (1).csv",
+            #     "/content/df_stock.csv"
+            # ]
             PRICE_PATHS = [
-                "/content/df_stock2.csv",
-                "/content/df_stock_fix_1April (1).csv",
-                "/content/df_stock.csv"
+                repo_path("df_stock2.csv"),                 # hasil scrape
+                repo_path("df_stock_fix_1April (1).csv"),   # data lama
+                repo_path("df_stock.csv"),                  # opsional/fallback (kalau ada)
             ]
             price_catalog = load_price_catalog(PRICE_PATHS)
             found_dt, actual_val = find_actual_and_trading_date(
