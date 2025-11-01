@@ -32,6 +32,13 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+# ==== WAJIB: jadikan perintah Streamlit pertama ====
+st.set_page_config(
+    page_title="INDONESIA BANKING STOCK PRICE PREDICTION",
+    page_icon="📈",
+    layout="wide"
+)
+
 # ==== PATH HELPERS ====
 APP_DIR = Path(__file__).parent.resolve()
 def repo_path(*parts: str) -> str:
@@ -115,7 +122,6 @@ def get_pipeline_local_path() -> str:
 # =========================================
 # CONFIG & THEME
 # =========================================
-st.set_page_config(page_title="INDONESIA BANKING STOCK PRICE PREDICTION", page_icon="📈", layout="wide")
 st.markdown("""
 <style>
 /* ====== Header ====== */
