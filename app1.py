@@ -1,5 +1,7 @@
 # ==== Ultra-early COMPAT SHIM untuk artefak .joblib lama (JANGAN HAPUS) ====
-import sys, types
+# ==== ULTRA-EARLY HF TOKENIZER COMPAT (JANGAN HAPUS) ====
+import types, sys
+# Shim lama untuk artefak joblib (sudah kamu punya):
 if "sentence_transformers.model_card" not in sys.modules:
     _mc = types.ModuleType("sentence_transformers.model_card")
     class _ModelCard: ...
@@ -10,6 +12,17 @@ if "sentence_transformers.model_card" not in sys.modules:
     _mc.ModelCard = _ModelCard
     _mc.SentenceTransformerModelCardData = _SentenceTransformerModelCardData
     sys.modules["sentence_transformers.model_card"] = _mc
+
+# ✅ Shim baru untuk tokenizer _pad_token
+try:
+    from transformers import PreTrainedTokenizerBase
+    # Pasang fallback di level class agar semua instance aman dari AttributeError
+    if not hasattr(PreTrainedTokenizerBase, "_pad_token"):
+        PreTrainedTokenizerBase._pad_token = None  # class attr fallback
+except Exception:
+    pass
+# ==== END ULTRA-EARLY COMPAT SHIM ====
+
 # ==== END SHIM ====
 
 # =========================================
@@ -594,64 +607,96 @@ if pr_feature == "Sentiment":
     # --- tambahkan di dekat import SBERTEncoder kamu ---
     def _ensure_pad_token_for_st_model(st_model):
         """
-        Pastikan tokenizer punya pad_token & atribut privat yang dibutuhkan
-        oleh transformers baru. Jika belum ada, tambahkan '[PAD]' dan resize
-        embedding agar indexnya valid.
+        Pastikan tokenizer di dalam SentenceTransformer aman untuk padding di semua versi HF.
+        - Menjamin atribut privat `_pad_token` tersedia (via class fallback pada step #1).
+        - Set pad_token bila belum ada (reuse eos/sep; kalau tidak ada, tambahkan [PAD] dan resize embedding).
         """
-        # Ambil tokenizer dari SentenceTransformer
         tok = getattr(st_model, "tokenizer", None)
-        if tok is None and hasattr(st_model, "_first_module"):
+        if tok is None:
+            # Coba akses modul pertama di SentenceTransformer
             try:
                 tok = st_model._first_module().tokenizer
             except Exception:
-                pass
+                tok = None
         if tok is None:
-            return  # tidak bisa apa-apa, tapi sangat jarang terjadi
+            return  # tidak bisa lanjut, tetapi kasus ini jarang
     
-        # Beberapa versi lama tidak punya atribut privat ini:
+        # (A) Pastikan atribut privat aman; jika instance tidak punya, class fallback dari step #1 yang dipakai.
         if not hasattr(tok, "_pad_token"):
-            tok._pad_token = None  # buat placeholder agar property pad_token tidak error
+            try:
+                tok._pad_token = None  # biasanya boleh; kalau tidak, class fallback tetap melindungi
+            except Exception:
+                pass  # aman, class-level sudah ada
     
-        # Kalau belum ada pad token → set atau tambahkan
+        # (B) Pastikan ada pad_token
         if getattr(tok, "pad_token", None) is None:
             candidate = getattr(tok, "eos_token", None) or getattr(tok, "sep_token", None)
             if candidate:
                 tok.pad_token = candidate
             else:
-                # Tambah token baru [PAD] dan resize embedding
-                tok.add_special_tokens({"pad_token": "[PAD]"})
+                # Tambah token baru [PAD]
                 try:
-                    # Untuk model AutoModel di SentenceTransformer
+                    tok.add_special_tokens({"pad_token": "[PAD]"})
+                except Exception:
+                    # beberapa tokenizer tidak expose add_special_tokens; abaikan
+                    pass
+                # Resize embedding agar index pad valid
+                try:
+                    # kebanyakan SentenceTransformer punya .auto_model
                     st_model.auto_model.resize_token_embeddings(len(tok))
                 except Exception:
-                    # Lewatkan jika tidak tersedia; kebanyakan model ST punya auto_model
-                    pass
+                    try:
+                        # fallback: modul pertama biasanya punya .auto_model
+                        fm = st_model._first_module()
+                        if hasattr(fm, "auto_model"):
+                            fm.auto_model.resize_token_embeddings(len(tok))
+                    except Exception:
+                        pass
     
-        # Pastikan id valid
+        # (C) Terakhir, pastikan id valid
         if getattr(tok, "pad_token_id", None) in (None, -1):
-            tok.pad_token = tok.pad_token or "[PAD]"
+            try:
+                tok.pad_token = tok.pad_token or "[PAD]"
+            except Exception:
+                pass
 
+
+    from sklearn.base import BaseEstimator, TransformerMixin
+        try:
+            from sentence_transformers import SentenceTransformer
+        except Exception:
+            SentenceTransformer = None
+    
     class SBERTEncoder(BaseEstimator, TransformerMixin):
-        def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-                     batch_size=64, normalize_embeddings=True, device=None):
+        def __init__(self,
+                     model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                     batch_size=64,
+                     normalize_embeddings=True,
+                     device=None):
             if SentenceTransformer is None:
-                raise ImportError("Missing sentence-transformers. Install dulu: pip install -q sentence-transformers")
+                raise ImportError("Missing sentence-transformers. Install: pip install sentence-transformers")
             self.model_name = model_name
             self.batch_size = batch_size
             self.normalize_embeddings = normalize_embeddings
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
     
-            # ✅ FIX tokenizer pad-token untuk kompatibilitas versi
+            # ✅ Pastikan tokenizer ready sebelum inference
             _ensure_pad_token_for_st_model(self._encoder)
-
-
-        def fit(self, X, y=None): return self
+    
+        def fit(self, X, y=None):
+            return self
+    
         def transform(self, X):
             texts = pd.Series(X).astype(str).tolist()
+            # (Opsional) panggil lagi demi aman kalau pipeline diload dari joblib lama
+            _ensure_pad_token_for_st_model(self._encoder)
             embs = self._encoder.encode(
-                texts, batch_size=self.batch_size, show_progress_bar=False,
-                convert_to_numpy=True, normalize_embeddings=self.normalize_embeddings,
+                texts,
+                batch_size=self.batch_size,
+                show_progress_bar=False,
+                convert_to_numpy=True,
+                normalize_embeddings=self.normalize_embeddings,
             )
             return embs
 
