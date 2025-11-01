@@ -588,26 +588,48 @@ if pr_feature == "Sentiment":
 
     @st.cache_resource(show_spinner=True)
     # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
+    # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
+  # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
     import sys, types
     try:
         import sentence_transformers.model_card  # ✅ kalau modulnya ada, lanjut normal
     except Exception:
-        # ❌ kalau modul hilang, buat dummy module agar joblib.load tidak error
         mc = types.ModuleType("sentence_transformers.model_card")
-    
         class ModelCard:
             def __init__(self, **kwargs):
                 for k, v in kwargs.items():
                     setattr(self, k, v)
-    
-        # beberapa pickle lama pakai nama berbeda
         class SentenceTransformerModelCard(ModelCard):
             pass
-    
         mc.ModelCard = ModelCard
         mc.SentenceTransformerModelCard = SentenceTransformerModelCard
         sys.modules["sentence_transformers.model_card"] = mc
     # ==== END PATCH ====
+    
+    
+    @st.cache_resource(show_spinner=True)
+    def load_pipeline(path_joblib: str):
+        import joblib
+        if not os.path.exists(path_joblib):
+            raise FileNotFoundError(
+                f"File pipeline tidak ditemukan: {path_joblib}. "
+                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
+            )
+        pipe = joblib.load(path_joblib)
+        return pipe
+
+    
+    @st.cache_resource(show_spinner=True)
+    def load_pipeline(path_joblib: str):
+        import joblib
+        if not os.path.exists(path_joblib):
+            raise FileNotFoundError(
+                f"File pipeline tidak ditemukan: {path_joblib}. "
+                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
+            )
+        pipe = joblib.load(path_joblib)
+        return pipe
+
 
     
     def load_pipeline(path_joblib: str):
@@ -1546,26 +1568,34 @@ elif pr_feature == "Sentiment + Technical":
             return text
 
     # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
-    import sys, types
-    try:
-        import sentence_transformers.model_card  # ✅ kalau modulnya ada, lanjut normal
-    except Exception:
-        # ❌ kalau modul hilang, buat dummy module agar joblib.load tidak error
-        mc = types.ModuleType("sentence_transformers.model_card")
-    
-        class ModelCard:
-            def __init__(self, **kwargs):
-                for k, v in kwargs.items():
-                    setattr(self, k, v)
-    
-        # beberapa pickle lama pakai nama berbeda
-        class SentenceTransformerModelCard(ModelCard):
-            pass
-    
-        mc.ModelCard = ModelCard
-        mc.SentenceTransformerModelCard = SentenceTransformerModelCard
-        sys.modules["sentence_transformers.model_card"] = mc
-    # ==== END PATCH ====
+    # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
+import sys, types
+try:
+    import sentence_transformers.model_card  # ✅ kalau modulnya ada, lanjut normal
+except Exception:
+    mc = types.ModuleType("sentence_transformers.model_card")
+    class ModelCard:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+    class SentenceTransformerModelCard(ModelCard):
+        pass
+    mc.ModelCard = ModelCard
+    mc.SentenceTransformerModelCard = SentenceTransformerModelCard
+    sys.modules["sentence_transformers.model_card"] = mc
+# ==== END PATCH ====
+
+
+@st.cache_resource(show_spinner=True)
+def load_pipeline(path_joblib: str):
+    import joblib
+    if not os.path.exists(path_joblib):
+        raise FileNotFoundError(
+            f"File pipeline tidak ditemukan: {path_joblib}. "
+            "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
+        )
+    pipe = joblib.load(path_joblib)
+    return pipe
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
