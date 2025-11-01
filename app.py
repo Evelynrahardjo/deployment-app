@@ -80,17 +80,53 @@ def ensure_model_file(path_joblib: str) -> None:
                         f.write(chunk)
 
     def _download(url: str, dst: str) -> None:
-        # Jika URL Google Drive → gunakan gdown (bisa handle confirm token & file besar)
-        if ("drive.google.com" in url) or ("uc?id=" in url) or url.strip().startswith("gdrive://"):
+        """
+        Downloader yang robust untuk:
+        - Google Drive share link: /file/d/<FILE_ID>/view?usp=sharing
+        - Google Drive direct: uc?export=download&id=<FILE_ID>
+        - Non-Drive HTTP link (fallback ke requests)
+        """
+        is_gdrive = ("drive.google.com" in url) or ("uc?id=" in url) or url.strip().startswith("gdrive://")
+    
+        if is_gdrive:
             try:
                 import gdown
             except Exception as e:
+                raise RuntimeError("gdown belum terpasang. Tambahkan `gdown==5.2.0` di requirements.txt") from e
+    
+            # --- Ambil FILE_ID dari berbagai bentuk URL ---
+            import re
+            file_id = None
+    
+            # Pola 1: /file/d/<FILE_ID>/
+            m = re.search(r"/d/([^/]+)/", url)
+            if m:
+                file_id = m.group(1)
+    
+            # Pola 2: ...id=<FILE_ID>
+            if file_id is None:
+                m2 = re.search(r"[?&]id=([^&]+)", url)
+                if m2:
+                    file_id = m2.group(1)
+    
+            try:
+                if file_id:
+                    # Cara paling stabil di gdown → langsung via id
+                    gdown.download(id=file_id, output=dst, quiet=False)
+                else:
+                    # Biarkan gdown parse sendiri jika pola tidak ketemu
+                    gdown.download(url=url, output=dst, quiet=False, fuzzy=True)
+            except Exception as e:
                 raise RuntimeError(
-                    "gdown belum terpasang. Tambahkan `gdown==5.2.0` di requirements.txt"
+                    "Gagal mengunduh dari Google Drive. Pastikan:\n"
+                    "• Share: Anyone with the link (Viewer)\n"
+                    "• Link benar (bisa /file/d/<id>/view atau uc?export=download&id=<id>)\n"
+                    "• Tidak kena quota. Jika quota habis, buat copy di Drive → pakai FILE_ID baru.\n"
                 ) from e
-            gdown.download(url=url, output=dst, quiet=False, fuzzy=True)
         else:
             _download_http(url, dst)
+
+
 
     # Ambil URL dari secrets
     try:
