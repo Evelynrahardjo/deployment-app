@@ -14,6 +14,13 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+page = st.sidebar.radio(
+    "Navigation",
+    options=["🏠 Home","📊 Dashboard","🧮 Prediction Request and Results"],
+    index=1,
+    label_visibility="collapsed",
+)
 # ==== Ultra-early COMPAT SHIM untuk artefak .joblib lama (JANGAN HAPUS) ====
 # ==== ULTRA-EARLY HF TOKENIZER COMPAT (JANGAN HAPUS) ====
 # ==== ULTRA-EARLY COMPAT SHIM (JANGAN HAPUS) ====
@@ -28,8 +35,19 @@ try:
 except Exception:
     pass
 
+# ==== ULTRA-EARLY HF/Tokenizer/ModelCard/SDPA COMPAT (PASTE PALING ATAS) ====
+import sys, types
+
+# 1) SDPA BERT (tutup gap versi transformers)
+def _ENSURE_BERT_SDPA_FLAGS(hf_model):
+    try:
+        from transformers.models.bert.modeling_bert import BertSdpaSelfAttention as _Sdpa
+        if not hasattr(_Sdpa, "require_contiguous_qkv"):
+            _Sdpa.require_contiguous_qkv = False
+    except Exception:
+        pass
+
 def _ENSURE_BERT_SDPA_FOR_ST(st_model):
-    """Find the underlying HF model inside a SentenceTransformer and apply SDPA flags."""
     try:
         first_mod = st_model._first_module() if hasattr(st_model, "_first_module") else None
         core = (
@@ -42,9 +60,7 @@ def _ENSURE_BERT_SDPA_FOR_ST(st_model):
     except Exception:
         pass
 
-# ==== END ULTRA-EARLY ====
-import sys, types
-
+# 2) Tambah default fields ke config BERT (hindari AttributeError artefak lama)
 _HF_CFG_DEFAULTS = {
     "output_attentions": False,
     "output_hidden_states": False,
@@ -54,7 +70,6 @@ _HF_CFG_DEFAULTS = {
     "use_cache": False,
     "torchscript": False,
 }
-
 def _cfg_set_defaults(cfg):
     try:
         for k, v in _HF_CFG_DEFAULTS.items():
@@ -65,7 +80,6 @@ def _cfg_set_defaults(cfg):
     except Exception:
         pass
 
-# Patch BertConfig agar instance punya field-field default di atas
 try:
     from transformers.models.bert.configuration_bert import BertConfig as _BertConfig
     _orig_init = _BertConfig.__init__
@@ -76,27 +90,6 @@ try:
 except Exception:
     pass
 
-# Shim modul lama: sentence_transformers.model_card (artefak .joblib lama suka refer ke sini)
-if "sentence_transformers.model_card" not in sys.modules:
-    _mc = types.ModuleType("sentence_transformers.model_card")
-    class _ModelCard: ...
-    class _SentenceTransformerModelCardData:
-        def __init__(self, **kwargs):
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-    _mc.ModelCard = _ModelCard
-    _mc.SentenceTransformerModelCardData = _SentenceTransformerModelCardData
-    sys.modules["sentence_transformers.model_card"] = _mc
-
-# Tokenizer privat attr kompat
-try:
-    from transformers import PreTrainedTokenizerBase
-    if not hasattr(PreTrainedTokenizerBase, "_unk_token"): PreTrainedTokenizerBase._unk_token = None
-    if not hasattr(PreTrainedTokenizerBase, "_pad_token"): PreTrainedTokenizerBase._pad_token = None
-except Exception:
-    pass
-
-# Helpers supaya aman dipanggil kapan saja
 def _ENSURE_ST_ENCODER_OK(st_model):
     try:
         first_mod = getattr(st_model, "_first_module")() if hasattr(st_model, "_first_module") else None
@@ -108,6 +101,26 @@ def _ENSURE_ST_ENCODER_OK(st_model):
             _cfg_set_defaults(core.config)
     except Exception:
         pass
+
+# 3) Shim modul lama sentence_transformers.model_card
+if "sentence_transformers.model_card" not in sys.modules:
+    _mc = types.ModuleType("sentence_transformers.model_card")
+    class _ModelCard: ...
+    class _SentenceTransformerModelCardData:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+    _mc.ModelCard = _ModelCard
+    _mc.SentenceTransformerModelCardData = _SentenceTransformerModelCardData
+    sys.modules["sentence_transformers.model_card"] = _mc
+
+# 4) Tokenizer base: pastikan atribut privat tersedia
+try:
+    from transformers import PreTrainedTokenizerBase
+    if not hasattr(PreTrainedTokenizerBase, "_unk_token"): PreTrainedTokenizerBase._unk_token = None
+    if not hasattr(PreTrainedTokenizerBase, "_pad_token"): PreTrainedTokenizerBase._pad_token = None
+except Exception:
+    pass
 
 def _ENSURE_PAD_TOKEN_FOR_ST_MODEL(st_model):
     try:
@@ -130,7 +143,6 @@ def _ENSURE_PAD_TOKEN_FOR_ST_MODEL(st_model):
                     setattr(tok, "_pad_token", "[PAD]")
                     try: tok.pad_token = "[PAD]"
                     except Exception: pass
-
         if getattr(tok, "pad_token_id", None) is None:
             try: tok.pad_token = tok.pad_token
             except Exception: pass
@@ -149,12 +161,16 @@ def _ENSURE_PAD_TOKEN_FOR_ST_MODEL(st_model):
             pass
     except Exception:
         pass
-# ==== END ULTRA-EARLY ====
 
-
-globals()["_CFG_SET_DEFAULTS"] = _cfg_set_defaults        # <- kalau kamu memang mendefinisikan _cfg_set_defaults
-globals()["_ENSURE_ST_ENCODER_OK"] = _ENSURE_ST_ENCODER_OK
-globals()["_ENSURE_PAD_TOKEN_FOR_ST_MODEL"] = _ENSURE_PAD_TOKEN_FOR_ST_MODEL
+# Ekspos helper ke global (kalau perlu di-lookup saat unpickle)
+globals().update({
+    "_ENSURE_BERT_SDPA_FLAGS": _ENSURE_BERT_SDPA_FLAGS,
+    "_ENSURE_BERT_SDPA_FOR_ST": _ENSURE_BERT_SDPA_FOR_ST,
+    "_ENSURE_ST_ENCODER_OK": _ENSURE_ST_ENCODER_OK,
+    "_ENSURE_PAD_TOKEN_FOR_ST_MODEL": _ENSURE_PAD_TOKEN_FOR_ST_MODEL,
+    "_CFG_SET_DEFAULTS": _cfg_set_defaults,
+})
+# ==== END ULTRA-EARLY COMPAT ====
 
 
 # ==== END ULTRA-EARLY HF CONFIG COMPAT ====
