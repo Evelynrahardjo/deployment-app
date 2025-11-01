@@ -693,7 +693,46 @@ if pr_feature == "Sentiment":
         if tok is not None:
             _ensure_tokenizer_tokens(tok)
 
-    
+    def _ensure_transformer_config_defaults(st_model):
+    """
+    Beberapa artefak lama tidak menyertakan field di BertConfig.
+    Paksa isi default agar transformers terbaru tidak `AttributeError`.
+    Aman dipanggil berulang-ulang.
+    """
+    try:
+        # Ambil model dasar dari SentenceTransformer
+        first_mod = st_model._first_module()
+        core = getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None)
+        if core is None:
+            return
+        cfg = getattr(core, "config", None)
+        if cfg is None:
+            return
+
+        # Field yang sering hilang pada artefak lama
+        defaults = {
+            "output_attentions": False,
+            "output_hidden_states": False,
+            "is_decoder": False,
+            "add_cross_attention": False,
+            "use_cache": False,          # untuk decoder; aman False di encoder
+            "torchscript": False,        # kadang disentuh beberapa wrapper
+        }
+        for k, v in defaults.items():
+            if not hasattr(cfg, k):
+                setattr(cfg, k, v)
+
+        # Bonus: pastikan return_dict default aman; forward sudah pakai return_dict=False,
+        # tapi tidak ada salahnya set juga di config jika tersedia.
+        try:
+            if hasattr(cfg, "return_dict") and cfg.return_dict is None:
+                cfg.return_dict = False
+        except Exception:
+            pass
+    except Exception:
+        # jangan biarkan compat ini meledak
+        pass
+
     # ==== PAD-TOKEN SAFETY untuk tokenizer HF/SBERT ====
     def _ensure_pad_token_for_st_model(st_model):
         """
@@ -761,18 +800,21 @@ if pr_feature == "Sentiment":
         except Exception:
             # jangan biarkan compat ini meledak
             pass
-
+    from sklearn.base import BaseEstimator, TransformerMixin
+    from sentence_transformers import SentenceTransformer
+    
     class SBERTEncoder(BaseEstimator, TransformerMixin):
         def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
                      batch_size=64, normalize_embeddings=True, device=None):
-            if SentenceTransformer is None:
-                raise ImportError("Missing sentence-transformers. Install: pip install sentence-transformers")
             self.model_name = model_name
             self.batch_size = batch_size
             self.normalize_embeddings = normalize_embeddings
             self.device = device
+    
+            # === INI TEMPATNYA (SETELAH INIT MODEL) ===
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
-            _ensure_pad_token_for_st_model(self._encoder)  # <<— WAJIB
+            _ensure_pad_token_for_st_model(self._encoder)           # ✅ panggil di __init__
+            _ensure_transformer_config_defaults(self._encoder)       # ✅ panggil di __init__
     
         def fit(self, X, y=None):
             return self
@@ -780,7 +822,11 @@ if pr_feature == "Sentiment":
         def transform(self, X):
             import pandas as pd
             texts = pd.Series(X).astype(str).tolist()
-            _ensure_pad_token_for_st_model(self._encoder)  # <<— panggil lagi sebelum encode
+    
+            # === DAN PANGGIL LAGI SEBELUM ENCODE (AMAN, idempotent) ===
+            _ensure_pad_token_for_st_model(self._encoder)           # ✅ sebelum encode
+            _ensure_transformer_config_defaults(self._encoder)       # ✅ sebelum encode
+    
             embs = self._encoder.encode(
                 texts,
                 batch_size=self.batch_size,
@@ -789,6 +835,8 @@ if pr_feature == "Sentiment":
                 normalize_embeddings=self.normalize_embeddings,
             )
             return embs
+
+
 
 
     
@@ -1780,23 +1828,21 @@ if pr_feature == "Sentiment + Technical":
     # SBERT encoder (agar pipeline joblib yang berisi SBERTEncoder bisa dikenali)
     
     # from sklearn.base import BaseEstimator, TransformerMixin
-    from sklearn.base import BaseEstimator, TransformerMixin    
-    try:
-        from sentence_transformers import SentenceTransformer
-    except Exception:
-        SentenceTransformer = None
-
+    from sklearn.base import BaseEstimator, TransformerMixin
+    from sentence_transformers import SentenceTransformer
+    
     class SBERTEncoder(BaseEstimator, TransformerMixin):
         def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
                      batch_size=64, normalize_embeddings=True, device=None):
-            if SentenceTransformer is None:
-                raise ImportError("Missing sentence-transformers. Install: pip install sentence-transformers")
             self.model_name = model_name
             self.batch_size = batch_size
             self.normalize_embeddings = normalize_embeddings
             self.device = device
+    
+            # === INI TEMPATNYA (SETELAH INIT MODEL) ===
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
-            _ensure_pad_token_for_st_model(self._encoder)  # <<— WAJIB
+            _ensure_pad_token_for_st_model(self._encoder)           # ✅ panggil di __init__
+            _ensure_transformer_config_defaults(self._encoder)       # ✅ panggil di __init__
     
         def fit(self, X, y=None):
             return self
@@ -1804,7 +1850,11 @@ if pr_feature == "Sentiment + Technical":
         def transform(self, X):
             import pandas as pd
             texts = pd.Series(X).astype(str).tolist()
-            _ensure_pad_token_for_st_model(self._encoder)  # <<— panggil lagi sebelum encode
+    
+            # === DAN PANGGIL LAGI SEBELUM ENCODE (AMAN, idempotent) ===
+            _ensure_pad_token_for_st_model(self._encoder)           # ✅ sebelum encode
+            _ensure_transformer_config_defaults(self._encoder)       # ✅ sebelum encode
+    
             embs = self._encoder.encode(
                 texts,
                 batch_size=self.batch_size,
@@ -1813,6 +1863,9 @@ if pr_feature == "Sentiment + Technical":
                 normalize_embeddings=self.normalize_embeddings,
             )
             return embs
+
+
+    
 
 
     @st.cache_resource(show_spinner=False)
