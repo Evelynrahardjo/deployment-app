@@ -74,6 +74,32 @@ try:
 except Exception as e:
     print("Compat shim (BERT SDPA) failed:", e)
 
+# --- SBERT tokenizer pad-token safety patch ---
+def _ensure_pad_token_for_sbert(sbert_model):
+    """
+    Pastikan tokenizer SBERT punya pad_token & atribut _pad_token,
+    dan resize embedding model kalau kita menambah token baru.
+    """
+    try:
+        mod = sbert_model._first_module()  # sentence_transformers.models.Transformer
+        tok = mod.tokenizer
+
+        # Pastikan atribut internal ada agar property tok.pad_token tidak error
+        if not hasattr(tok, "_pad_token"):
+            tok._pad_token = None
+
+        # Kalau belum ada pad_token, set sekarang dan resize embedding
+        if tok.pad_token is None:
+            cand = tok.sep_token or tok.eos_token or tok.cls_token or "[PAD]"
+            tok.add_special_tokens({"pad_token": cand})
+            try:
+                mod.auto_model.resize_token_embeddings(len(tok))
+            except Exception:
+                pass
+    except Exception as e:
+        print("Pad-token patch failed:", e)
+
+
 # =========================================
 # CONFIG & THEME
 # =========================================
@@ -599,6 +625,8 @@ if pr_feature == "Sentiment":
             self.normalize_embeddings = normalize_embeddings
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
+            _ensure_pad_token_for_sbert(self._encoder)  # <<< tambahkan ini
+
 
         def fit(self, X, y=None): return self
         def transform(self, X):
@@ -1600,6 +1628,8 @@ elif pr_feature == "Sentiment + Technical":
             self.normalize_embeddings = normalize_embeddings
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
+            _ensure_pad_token_for_sbert(self._encoder)  # <<< tambahkan ini
+
 
         def fit(self, X, y=None): return self
         def transform(self, X):
