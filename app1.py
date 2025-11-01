@@ -644,6 +644,13 @@ if pr_feature == "Sentiment":
             # Diamkan saja, beberapa tokenizer read-only
             pass
     # ==== END SHIM ====
+# ==== Imports yang WAJIB ada tepat sebelum SBERTEncoder ====
+from sklearn.base import BaseEstimator, TransformerMixin
+
+try:
+    from sentence_transformers import SentenceTransformer
+except Exception:
+    SentenceTransformer = None  # biar jelas kalau lib belum terpasang
 
 class SBERTEncoder(BaseEstimator, TransformerMixin):
     def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
@@ -1579,7 +1586,9 @@ if pr_feature == "Sentiment + Technical":
 
 
     # SBERT encoder (agar pipeline joblib yang berisi SBERTEncoder bisa dikenali)
-    from sklearn.base import BaseEstimator, TransformerMixin
+    
+    # from sklearn.base import BaseEstimator, TransformerMixin
+    from sklearn.base import BaseEstimator, TransformerMixin    
     try:
         from sentence_transformers import SentenceTransformer
     except Exception:
