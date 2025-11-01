@@ -247,6 +247,46 @@ button[aria-label="Toggle sidebar"]:hover, [data-testid="collapsedControl"]:hove
 </style>
 """, unsafe_allow_html=True)
 
+<style>
+/* 1) Input tanggal & Select: ubah teks jadi hitam */
+.stDateInput input,
+.stSelectbox div[data-baseweb="select"] input {
+  color: #111 !important;
+}
+
+/* Nilai yang tampil di Select (bukan input pencarian) */
+.stSelectbox div[data-baseweb="select"] div[role="button"] div {
+  color: #111 !important;
+}
+
+/* 2) TextArea & placeholder */
+.stTextArea textarea{
+  color: #111 !important;
+}
+.stTextArea textarea::placeholder{
+  color: #6b7280 !important; /* abu2 gelap, bukan putih */
+}
+
+/* 3) TextInput/NumberInput (BaseWeb input) */
+div[data-baseweb="input"] input {
+  color: #111 !important;
+}
+
+/* 4) Semua teks di komponen ber-background terang (alert/expander/dataframe/markdown) */
+.stAlert, .stAlert * { color: #111 !important; }
+[data-testid="stExpander"], [data-testid="stExpander"] * { color: #111 !important; }
+[data-testid="stMarkdownContainer"] { color: #111 !important; }
+.stDataFrame, .stDataFrame * { color: #111 !important; }
+
+/* 5) Radio/label sudah hitam, tapi kita perkuat lagi */
+.stRadio div[role="radio"] p,
+label, .stRadio label p, .stDateInput label p, .stSelectbox label p {
+  color: #111 !important;
+  font-weight: 600 !important;
+}
+</style>
+
+
 # =========================================
 # UTIL: TRANSLATOR (opsional)
 # =========================================
