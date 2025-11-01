@@ -7,6 +7,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import sys, types, importlib
 
 # Plotly
 import plotly.express as px
@@ -36,30 +37,41 @@ from pathlib import Path  # <- pastikan ini ada
 import sys, types, importlib
 
 # 1) Shim untuk artefak lama sentence_transformers yang refer ke 'sentence_transformers.model_card'
+# ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
+# Harus ada SEBELUM pemanggilan joblib.load() apapun.
+import sys, types
+
+# 1) Lengkapi semua kelas yang mungkin dicari pickle di 'sentence_transformers.model_card'
 try:
-    import importlib.util
-    spec = importlib.util.find_spec("sentence_transformers.model_card")
-    if spec is None:
-        _mod = types.ModuleType("sentence_transformers.model_card")
+    import importlib, importlib.util
+    _mod_name = "sentence_transformers.model_card"
+    spec = importlib.util.find_spec(_mod_name)
+    _mod = importlib.import_module(_mod_name) if spec is not None else types.ModuleType(_mod_name)
 
-        # Kelas dummy yang cukup untuk dilewati unpickler
-        class SentenceTransformerModelCard:
-            def __init__(self, *args, **kwargs): pass
-            def __getstate__(self): return {}
-            def __setstate__(self, state): pass
+    # Beberapa artefak pickle (lintas versi) memanggil nama-nama ini:
+    _needed = (
+        "SentenceTransformerModelCard",
+        "ModelCard",
+        "SentenceTransformerModelCardData",
+        "SentenceTransformerModelCardMeta",
+    )
 
-        # Beberapa artefak lama memanggil 'ModelCard' juga
-        class ModelCard:
-            def __init__(self, *args, **kwargs): pass
+    class _DummyModelCard:
+        def __init__(self, *args, **kwargs): pass
+        def __getstate__(self): return {}
+        def __setstate__(self, state): pass
 
-        _mod.SentenceTransformerModelCard = SentenceTransformerModelCard
-        _mod.ModelCard = ModelCard
-        sys.modules["sentence_transformers.model_card"] = _mod
+    for _name in _needed:
+        if not hasattr(_mod, _name):
+            setattr(_mod, _name, _DummyModelCard)
+
+    # Pastikan module entry di sys.modules menunjuk ke objek dengan kelas dummy di atas
+    sys.modules[_mod_name] = _mod
 except Exception:
-    # jangan mematikan app kalau patch ini gagal
+    # Jangan mematikan app kalau patch ini gagal
     pass
 
-# 2) Kompatibilitas tokenizer lama yang kadang mengakses atribut private yang tak ada di versi baru
+# 2) Kompatibilitas tokenizer lama (beberapa artefak akses atribut private yang tak ada di versi baru)
 try:
     from transformers import PreTrainedTokenizerBase
     for _attr in ("_pad_token", "_sep_token", "_cls_token", "_mask_token", "_unk_token"):
@@ -67,6 +79,7 @@ try:
             setattr(PreTrainedTokenizerBase, _attr, None)
 except Exception:
     pass
+
 
 APP_DIR = Path(__file__).parent.resolve()
 
@@ -627,6 +640,7 @@ if pr_feature == "Sentiment":
         except Exception:
             return text
 
+    
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
         import joblib
