@@ -630,28 +630,21 @@ if pr_feature == "Sentiment":
 
     PATH_PIPELINE = get_pipeline_local_path()
 
-# ==== ULTRA-EARLY HF TOKENIZER COMPAT (JANGAN HAPUS) ====
+    # ==== ULTRA-EARLY SHIMS (sudah kamu punya) ====
+    # ... shim sentence_transformers.model_card & _pad_token (biarkan) ...
+    
+    # ==== SBERT helpers (HARUS di atas joblib.load) ====
+    from sklearn.base import BaseEstimator, TransformerMixin
     try:
-        from transformers import PreTrainedTokenizerBase
-        if not hasattr(PreTrainedTokenizerBase, "_pad_token"):
-            PreTrainedTokenizerBase._pad_token = None
+        from sentence_transformers import SentenceTransformer
     except Exception:
-        pass
+        SentenceTransformer = None
     
     def _ensure_pad_token_for_st_model(st_model):
-        """
-        Pastikan tokenizer di dalam SentenceTransformer punya pad_token.
-        - Reuse eos/sep kalau ada
-        - Kalau tidak ada, tambahkan [PAD]
-        """
-        tok = getattr(st_model, "tokenizer", None)
-        if tok is None:
-            try:
-                tok = st_model._first_module().tokenizer  # fallback lama
-            except Exception:
-                return
-        # Jika belum ada id, set token pad
         try:
+            tok = getattr(st_model, "tokenizer", None)
+            if tok is None:
+                tok = st_model._first_module().tokenizer  # fallback beberapa versi lama
             if getattr(tok, "pad_token_id", None) in (None, -1):
                 if getattr(tok, "sep_token", None):
                     tok.pad_token = tok.sep_token
@@ -660,64 +653,118 @@ if pr_feature == "Sentiment":
                 else:
                     tok.pad_token = tok.pad_token or "[PAD]"
         except Exception:
-            # Diamkan saja, beberapa tokenizer read-only
             pass
-    # ==== END SHIM ====
-# ==== Imports yang WAJIB ada tepat sebelum SBERTEncoder ====
-from sklearn.base import BaseEstimator, TransformerMixin
-
-try:
-    from sentence_transformers import SentenceTransformer
-except Exception:
-    SentenceTransformer = None  # biar jelas kalau lib belum terpasang
-
-class SBERTEncoder(BaseEstimator, TransformerMixin):
-    def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-                 batch_size=64, normalize_embeddings=True, device=None):
-        self.model_name = model_name
-        self.batch_size = batch_size
-        self.normalize_embeddings = normalize_embeddings
-        self.device = device
-        self._encoder = SentenceTransformer(self.model_name, device=self.device)
-
-        # ✅ FIX penting: pastikan pad_token tersedia
-        _ensure_pad_token_for_st_model(self._encoder)
-
-    def transform(self, X):
-        texts = pd.Series(X).astype(str).tolist()
-        # panggil lagi untuk artefak/joblib lama yang diload
-        _ensure_pad_token_for_st_model(self._encoder)
-        embs = self._encoder.encode(
-            texts,
-            batch_size=self.batch_size,
-            show_progress_bar=False,
-            convert_to_numpy=True,
-            normalize_embeddings=self.normalize_embeddings,
-        )
-        return embs
-
-
+    
+    class SBERTEncoder(BaseEstimator, TransformerMixin):
+        """
+        NOTE: KELAS INI HARUS TOP-LEVEL dan terdefinisi sblm joblib.load.
+        """
+        def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                     batch_size=64, normalize_embeddings=True, device=None):
+            if SentenceTransformer is None:
+                raise ImportError("Missing sentence-transformers. Install: pip install sentence-transformers")
+            self.model_name = model_name
+            self.batch_size = batch_size
+            self.normalize_embeddings = normalize_embeddings
+            self.device = device
+            self._encoder = SentenceTransformer(self.model_name, device=self.device)
+            _ensure_pad_token_for_st_model(self._encoder)
+    
+        def fit(self, X, y=None):
+            return self
+    
+        def transform(self, X):
+            import pandas as pd
+            texts = pd.Series(X).astype(str).tolist()
+            # pastikan tokenizer aman setiap kali transform
+            _ensure_pad_token_for_st_model(self._encoder)
+            embs = self._encoder.encode(
+                texts,
+                batch_size=self.batch_size,
+                show_progress_bar=False,
+                convert_to_numpy=True,
+                normalize_embeddings=self.normalize_embeddings,
+            )
+            return embs
+    
+    # ==== Daftarkan alias ke __main__ supaya unpickle tidak gagal ====
+    def _register_pickle_aliases():
+        import sys
+        main_mod = sys.modules.get("__main__")
+        if main_mod is not None and not hasattr(main_mod, "SBERTEncoder"):
+            setattr(main_mod, "SBERTEncoder", SBERTEncoder)
+    
+    # ==== MODEL DOWNLOADER (boleh pakai punyamu yg sdh ada) ====
+    import re, hashlib, os
+    def _normalize_gdrive_url(url: str) -> str:
+        if not url:
+            return url
+        if "drive.google.com/uc?id=" in url:
+            return url
+        m = re.search(r"drive\.google\.com/file/d/([^/]+)/", url)
+        if m:
+            return f"https://drive.google.com/uc?id={m.group(1)}"
+        return url
+    
+    def _safe_filename_from_url(url: str, default_name: str = "sentiment_pipeline_sbert_linsvc.joblib") -> str:
+        h = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
+        base = default_name if default_name.endswith(".joblib") else (default_name + ".joblib")
+        return f"{h}_{base}"
+    
+    def _download_with_requests(url: str, dst_path: str):
+        import requests
+        with requests.get(url, stream=True, timeout=300) as r:
+            r.raise_for_status()
+            total = int(r.headers.get("content-length", 0)) or None
+            chunk = 1024 * 1024
+            prog = st.progress(0.0) if total else None
+            downloaded = 0
+            with open(dst_path, "wb") as f:
+                for b in r.iter_content(chunk_size=chunk):
+                    if not b:
+                        continue
+                    f.write(b)
+                    if total:
+                        downloaded += len(b)
+                        prog.progress(min(1.0, downloaded / total))
+            if prog:
+                prog.empty()
+    
+    def _download_model_once(model_url: str) -> str:
+        os.makedirs(repo_path("models"), exist_ok=True)
+        norm = _normalize_gdrive_url(model_url)
+        local_name = _safe_filename_from_url(norm)
+        local_path = repo_path("models", local_name)
+        if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+            return local_path
+        with st.spinner("⬇️ Downloading sentiment pipeline from MODEL_URL..."):
+            try:
+                import gdown
+                gdown.download(url=norm, output=local_path, quiet=False, fuzzy=True)
+            except Exception:
+                _download_with_requests(norm, local_path)
+        if not os.path.exists(local_path) or os.path.getsize(local_path) == 0:
+            raise FileNotFoundError("Gagal mengunduh pipeline dari MODEL_URL.")
+        return local_path
+    
     @st.cache_resource(show_spinner=False)
-
-    def safe_translate_to_en(text: str) -> str:
-        tr = get_translator()
-        if tr is None:
-            return text
-        try:
-            return tr.translate(text, dest="en").text
-        except Exception:
-            return text
-
+    def get_pipeline_local_path() -> str:
+        url = st.secrets.get("MODEL_URL") if hasattr(st, "secrets") else None
+        if not url:
+            url = os.environ.get("MODEL_URL", "").strip()
+        if not url:
+            raise RuntimeError("MODEL_URL tidak ditemukan di st.secrets atau ENV.")
+        return _download_model_once(url)
+    
+    # ==== LOAD PIPELINE (PENTING: register alias dulu) ====
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        import joblib
+        _register_pickle_aliases()  # <- inilah kunci agar unpickle kenal SBERTEncoder
+        import joblib, os
         if not os.path.exists(path_joblib):
-            raise FileNotFoundError(
-                f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
-            )
-        pipe = joblib.load(path_joblib)
-        return pipe
+            raise FileNotFoundError(f"File pipeline tidak ditemukan: {path_joblib}")
+        return joblib.load(path_joblib)
+
 
     def predict_sentiment(pipe, txt: str):
         pred = pipe.predict([txt])[0]
