@@ -28,11 +28,52 @@ from datetime import datetime, timedelta
 from pathlib import Path  # ✅ tambahan ini
 
 # ==== PATH HELPERS ====
+# ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
+# ==== PATH HELPERS ====
+from pathlib import Path  # <- pastikan ini ada
+
+# ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
+import sys, types, importlib
+
+# 1) Shim untuk artefak lama sentence_transformers yang refer ke 'sentence_transformers.model_card'
+try:
+    import importlib.util
+    spec = importlib.util.find_spec("sentence_transformers.model_card")
+    if spec is None:
+        _mod = types.ModuleType("sentence_transformers.model_card")
+
+        # Kelas dummy yang cukup untuk dilewati unpickler
+        class SentenceTransformerModelCard:
+            def __init__(self, *args, **kwargs): pass
+            def __getstate__(self): return {}
+            def __setstate__(self, state): pass
+
+        # Beberapa artefak lama memanggil 'ModelCard' juga
+        class ModelCard:
+            def __init__(self, *args, **kwargs): pass
+
+        _mod.SentenceTransformerModelCard = SentenceTransformerModelCard
+        _mod.ModelCard = ModelCard
+        sys.modules["sentence_transformers.model_card"] = _mod
+except Exception:
+    # jangan mematikan app kalau patch ini gagal
+    pass
+
+# 2) Kompatibilitas tokenizer lama yang kadang mengakses atribut private yang tak ada di versi baru
+try:
+    from transformers import PreTrainedTokenizerBase
+    for _attr in ("_pad_token", "_sep_token", "_cls_token", "_mask_token", "_unk_token"):
+        if not hasattr(PreTrainedTokenizerBase, _attr):
+            setattr(PreTrainedTokenizerBase, _attr, None)
+except Exception:
+    pass
+
 APP_DIR = Path(__file__).parent.resolve()
 
 def repo_path(*parts: str) -> str:
     """Build absolute path safely for Streamlit Cloud or local."""
     return str(APP_DIR.joinpath(*parts))
+
 
 # =========================================
 # CONFIG & THEME
