@@ -43,8 +43,6 @@ def _ENSURE_BERT_SDPA_FOR_ST(st_model):
         pass
 
 # ==== END ULTRA-EARLY ====
-
-
 import sys, types
 
 _HF_CFG_DEFAULTS = {
@@ -386,6 +384,19 @@ page = st.sidebar.radio(
     index=1,
     label_visibility="collapsed",
 )
+
+# Sebelumnya
+start_date, end_date = st.date_input("Date Range", (min_date, max_date))
+feature_choice = st.radio("Feature Set", ["Sentiment", "Technical", "Sentiment + Technical"], horizontal=True)
+window = st.selectbox("Rolling Window (days)", [1, 3, 7, 14], index=2)
+ticker_sel = st.selectbox("Select Ticker", df["Ticker"].unique() if "Ticker" in df.columns else ["BBCA.JK"])
+
+# Sesudah (beri key unik khusus dashboard)
+start_date, end_date = st.date_input("Date Range", (min_date, max_date), key="dash_date_range")
+feature_choice = st.radio("Feature Set", ["Sentiment", "Technical", "Sentiment + Technical"], horizontal=True, key="dash_feature")
+window = st.selectbox("Rolling Window (days)", [1, 3, 7, 14], index=2, key="dash_window")
+ticker_sel = st.selectbox("Select Ticker", df["Ticker"].unique() if "Ticker" in df.columns else ["BBCA.JK"], key="dash_ticker")
+
 
 # =========================================
 # HOME
@@ -802,6 +813,16 @@ if page != "🧮 Prediction Request and Results":
 # =========================================================
 # FEATURE SET: SENTIMENT ONLY — optional classifier (if used)
 # =========================================================
+# Sebelumnya
+win_start = st.date_input("Start date for sentiment window", value=default_start, min_value=global_min, max_value=global_max)
+assign_date = st.date_input("Select date to assign the last result", value=win_end, min_value=win_start, max_value=win_end)
+manual_date = st.date_input("Date", value=win_end, min_value=win_start, max_value=win_end)
+
+# Sesudah (pakai key unik)
+win_start = st.date_input("Start date for sentiment window", value=default_start, min_value=global_min, max_value=global_max, key="sent_win_start")
+assign_date = st.date_input("Select date to assign the last result", value=win_end, min_value=win_start, max_value=win_end, key="assign_date_pred")
+manual_date = st.date_input("Date", value=win_end, min_value=win_start, max_value=win_end, key="assign_date_manual")
+
 if pr_feature == "Sentiment":
     st.write("---")
     st.subheader("🧠 Sentiment Analysis — News Description")
@@ -3104,6 +3125,17 @@ elif page == "📊 Dashboard":
 # =========================================
 else:
     st.title("🧮 Prediction Request and Results")
+    # Sebelumnya
+    pr_date_range = st.date_input("Date Range", value=(_default_start, _today))
+    pr_feature = st.radio("Feature Set", ["Sentiment", "Technical", "Sentiment + Technical"], horizontal=True)
+    pr_window = st.selectbox("Rolling Window (days)", WINDOWS, index=2)
+    pr_ticker = st.selectbox("Select Ticker", TICKERS, index=0)
+    
+    # Sesudah (beri key unik khusus prediction)
+    pr_date_range = st.date_input("Date Range", value=(_default_start, _today), key="pr_date_range")
+    pr_feature = st.radio("Feature Set", ["Sentiment", "Technical", "Sentiment + Technical"], horizontal=True, key="pr_feature")
+    pr_window = st.selectbox("Rolling Window (days)", WINDOWS, index=2, key="pr_window")
+    pr_ticker = st.selectbox("Select Ticker", TICKERS, index=0, key="pr_ticker")
 
     # ---- Controls
     TICKERS = ["BBCA.JK", "BMRI.JK", "BBRI.JK", "BDMN.JK"]
@@ -3234,7 +3266,7 @@ if pr_feature == "Sentiment":
 
     PATH_PIPELINE = get_pipeline_local_path()
 
-
+    
 
     from sklearn.base import BaseEstimator, TransformerMixin
     try:
