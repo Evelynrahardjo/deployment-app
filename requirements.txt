@@ -1,8 +1,8 @@
-# Core stack
+# Core stack (legacy-friendly, cocok dgn pickle lama & Py3.12)
 torch==2.2.2
-transformers==4.41.1
-sentence-transformers==2.2.2   # ↓ versi lebih lama, punya 'model_card'
-tokenizers==0.15.2             # aman untuk banyak artefak lama
+transformers==4.39.3
+sentence-transformers==2.2.2
+tokenizers==0.15.2
 
 # SciPy stack
 numpy==1.26.4
