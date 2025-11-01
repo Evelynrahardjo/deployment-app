@@ -386,10 +386,38 @@ page = st.sidebar.radio(
 )
 
 # Sebelumnya
-start_date, end_date = st.date_input("Date Range", (min_date, max_date))
-feature_choice = st.radio("Feature Set", ["Sentiment", "Technical", "Sentiment + Technical"], horizontal=True)
-window = st.selectbox("Rolling Window (days)", [1, 3, 7, 14], index=2)
-ticker_sel = st.selectbox("Select Ticker", df["Ticker"].unique() if "Ticker" in df.columns else ["BBCA.JK"])
+# pastikan ini ada lebih dulu (SETELAH df = load_data(...))
+min_date = df["Date"].min().date()
+max_date = df["Date"].max().date()
+
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    start_date, end_date = st.date_input(
+        "Date Range",
+        value=(min_date, max_date),
+        key="dash_date_range",
+    )
+with col2:
+    feature_choice = st.radio(
+        "Feature Set",
+        ["Sentiment", "Technical", "Sentiment + Technical"],
+        horizontal=True,
+        key="dash_feature",
+    )
+with col3:
+    window = st.selectbox(
+        "Rolling Window (days)",
+        [1, 3, 7, 14],
+        index=2,
+        key="dash_window",
+    )
+with col4:
+    ticker_sel = st.selectbox(
+        "Select Ticker",
+        df["Ticker"].unique() if "Ticker" in df.columns else ["BBCA.JK"],
+        key="dash_ticker",
+    )
+
 
 # Sesudah (beri key unik khusus dashboard)
 start_date, end_date = st.date_input("Date Range", (min_date, max_date), key="dash_date_range")
@@ -699,20 +727,42 @@ else:
     st.title("🧮 Prediction Request and Results")
 
     # ---- Controls
+    from datetime import datetime, timedelta
+
     TICKERS = ["BBCA.JK", "BMRI.JK", "BBRI.JK", "BDMN.JK"]
     WINDOWS = [1, 3, 5, 7, 14]
     _today = datetime.today().date()
-    _default_start = (_today - timedelta(days=180))
-
+    _default_start = _today - timedelta(days=180)
+    
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        pr_date_range = st.date_input("Date Range", value=(_default_start, _today), key="pr_date_range")
+        pr_date_range = st.date_input(
+            "Date Range",
+            value=(_default_start, _today),
+            key="pr_date_range",
+        )
     with c2:
-        pr_feature = st.radio("Feature Set", ["Sentiment", "Technical", "Sentiment + Technical"], horizontal=True, key="pr_feature")
+        pr_feature = st.radio(
+            "Feature Set",
+            ["Sentiment", "Technical", "Sentiment + Technical"],
+            horizontal=True,
+            key="pr_feature",
+        )
     with c3:
-        pr_window = st.selectbox("Rolling Window (days)", WINDOWS, index=2, key="pr_window")
+        pr_window = st.selectbox(
+            "Rolling Window (days)",
+            WINDOWS,
+            index=2,
+            key="pr_window",
+        )
     with c4:
-        pr_ticker = st.selectbox("Select Ticker", TICKERS, index=0, key="pr_ticker")
+        pr_ticker = st.selectbox(
+            "Select Ticker",
+            TICKERS,
+            index=0,
+            key="pr_ticker",
+        )
+
 
     st.caption(
         f"Pilihan saat ini → Ticker: **{pr_ticker}**, Feature: **{pr_feature}**, "
