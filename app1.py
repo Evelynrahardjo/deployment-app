@@ -775,19 +775,47 @@ else:
     _today   = datetime.today().date()
     
     c1, c2, c3, c4 = st.columns(4)
+    
+    # 1) Pilih window dulu
     with c3:
         pr_window = st.selectbox("Rolling Window (days)", WINDOWS, index=2, key="pr_window")
-        W = int(pr_window)
+    W = int(pr_window)
     
+    # 2) Date range terkunci (end = start + W - 1, max = hari ini)
+    #    - Simpan di session_state supaya stabil saat window berubah
+    def _init_default_range():
+        end0 = _today
+        start0 = max(end0 - timedelta(days=W-1), _today - timedelta(days=180))
+        return (start0, end0)
+    
+    if "pr_date_range" not in st.session_state:
+        st.session_state.pr_date_range = _init_default_range()
+    
+    def _snap_range_to_window():
+        s, e = st.session_state.pr_date_range
+        # normalisasi bila user memilih terbalik
+        if s > e:
+            s, e = e, s
+        # kunci panjang = W hari (inklusif)
+        target_end = min(s + timedelta(days=W-1), _today)
+        st.session_state.pr_date_range = (s, target_end)
+    
+    # 3) Widget date range (start–end), lalu "snap" ke W
     with c1:
-        # Pilih hanya start date; end date di-set otomatis = start + (W - 1)
-        # Defaultnya mundur W-1 hari dari hari ini
-        _default_start = max(_today - timedelta(days=W-1), _today - timedelta(days=180))
-        pr_start = st.date_input("Start Date (auto window)", value=_default_start, key="pr_start_date")
+        pr_start, pr_end = st.date_input(
+            "Date Range (locked to window)",
+            value=st.session_state.pr_date_range,
+            key="pr_date_range",
+        )
     
-    # End date otomatis sesuai window
-    pr_end = min(pr_start + timedelta(days=W - 1), _today)
+    # Paksa panjang sesuai W (mis. W=5 → end = start+4)
+    if (st.session_state.pr_date_range[1] - st.session_state.pr_date_range[0]).days != (W-1):
+        _snap_range_to_window()
     
+    # Baca kembali nilai yang sudah “disnap”
+    pr_start, pr_end = st.session_state.pr_date_range
+    
+    # 4) Lainnya tetap sama
     with c2:
         pr_feature = st.radio("Feature Set", ["Sentiment", "Technical", "Sentiment + Technical"],
                               horizontal=True, key="pr_feature")
@@ -796,8 +824,10 @@ else:
     
     st.caption(
         f"Pilihan saat ini → Ticker: **{pr_ticker}**, Feature: **{pr_feature}**, "
-        f"Window: **{W}**, Date: **{pr_start} – {pr_end}** (otomatis {W} hari)"
+        f"Window: **{W}**, Date: **{pr_start} – {pr_end}** (terkunci {W} hari)"
     )
+
+
 
     st.write("---")
 
