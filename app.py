@@ -40,6 +40,9 @@ def repo_path(*parts: str) -> str:
 # ==== MODEL FILE HELPERS (taruh DI ATAS, setelah imports & repo_path) ====
 import io, re, os
 
+# ==== MODEL FILE HELPERS (taruh DI ATAS, setelah imports & repo_path) ====
+import io, re, os
+
 def is_git_lfs_pointer(path: str) -> bool:
     """True jika file adalah POINTER Git LFS (bukan artefak biner)."""
     if not os.path.exists(path) or os.path.isdir(path):
@@ -53,9 +56,10 @@ def is_git_lfs_pointer(path: str) -> bool:
 
 def ensure_model_file(path_joblib: str) -> None:
     """
-    Pastikan file ada & biner. Jika:
-    - tidak ada file: coba unduh dari st.secrets["MODEL_URL"].
-    - file adalah Git LFS pointer: coba unduh dari st.secrets["MODEL_URL"] dan timpa.
+    Pastikan file model ada & biner (bukan Git LFS pointer).
+    Jika belum ada / masih pointer:
+      - download dari st.secrets['MODEL_URL'].
+      - Google Drive didukung via gdown (fuzzy=True).
     """
     import requests
 
@@ -66,42 +70,55 @@ def ensure_model_file(path_joblib: str) -> None:
             head = f.read(300)
         return b"version https://git-lfs.github.com/spec/v1" in head
 
-    def _download(url: str, dst: str) -> None:
-        r = requests.get(url, timeout=60)
-        r.raise_for_status()
-        with open(dst, "wb") as f:
-            f.write(r.content)
+    def _download_http(url: str, dst: str) -> None:
+        # Generic HTTP downloader (untuk selain Google Drive)
+        with requests.get(url, stream=True, timeout=120) as r:
+            r.raise_for_status()
+            with open(dst, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
 
-    # ⬇️ ini yang benar
-    model_url = None
+    def _download(url: str, dst: str) -> None:
+        # Jika URL Google Drive → gunakan gdown (bisa handle confirm token & file besar)
+        if ("drive.google.com" in url) or ("uc?id=" in url) or url.strip().startswith("gdrive://"):
+            try:
+                import gdown
+            except Exception as e:
+                raise RuntimeError(
+                    "gdown belum terpasang. Tambahkan `gdown==5.2.0` di requirements.txt"
+                ) from e
+            gdown.download(url=url, output=dst, quiet=False, fuzzy=True)
+        else:
+            _download_http(url, dst)
+
+    # Ambil URL dari secrets
     try:
         model_url = st.secrets.get("MODEL_URL", None)
     except Exception:
         model_url = None
 
-    # 1) jika file belum ada → coba unduh
+    # 1) Jika file belum ada → unduh
     if not os.path.exists(path_joblib):
-        if model_url:
-            _download(model_url, path_joblib)
-        else:
+        if not model_url:
             raise FileNotFoundError(
                 f"Model tidak ditemukan: {path_joblib}. "
-                "Set st.secrets['MODEL_URL'] untuk auto-download, atau commit file binernya."
+                "Set st.secrets['MODEL_URL'] ke URL biner (.joblib) publik (Google Drive/HF/S3)."
             )
+        _download(model_url, path_joblib)
 
-    # 2) jika file ada tapi pointer → coba unduh & timpa
+    # 2) Jika file ada tapi pointer → timpa via unduhan
     if _is_pointer(path_joblib):
-        if model_url:
-            _download(model_url, path_joblib)
-            if _is_pointer(path_joblib):
-                raise RuntimeError(
-                    "MODEL_URL terunduh tetapi masih pointer. Pastikan URL mengarah ke biner .joblib."
-                )
-        else:
+        if not model_url:
             raise RuntimeError(
-                "Terdeteksi Git LFS POINTER. Set st.secrets['MODEL_URL'] ke URL biner .joblib."
+                "Terdeteksi Git LFS POINTER. Set st.secrets['MODEL_URL'] ke URL biner .joblib (Google Drive/HF/S3)."
             )
-
+        _download(model_url, path_joblib)
+        # verifikasi ulang
+        if _is_pointer(path_joblib):
+            raise RuntimeError(
+                "MODEL_URL terunduh tapi masih pointer. Pastikan URL mengarah ke file .joblib biner langsung."
+            )
 
 
 # ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
