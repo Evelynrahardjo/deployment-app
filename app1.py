@@ -611,35 +611,39 @@ if pr_feature == "Sentiment":
 
     PATH_PIPELINE = get_pipeline_local_path()
 
-
-
-    from sklearn.base import BaseEstimator, TransformerMixin
+# ==== ULTRA-EARLY HF TOKENIZER COMPAT (JANGAN HAPUS) ====
     try:
-        from sentence_transformers import SentenceTransformer
-    except Exception as e:
-        SentenceTransformer = None  # biar app tetap jalan kalau lib belum ada
-
-    # --- tambahkan di dekat import SBERTEncoder kamu ---
+        from transformers import PreTrainedTokenizerBase
+        if not hasattr(PreTrainedTokenizerBase, "_pad_token"):
+            PreTrainedTokenizerBase._pad_token = None
+    except Exception:
+        pass
+    
     def _ensure_pad_token_for_st_model(st_model):
-    """
-    Pastikan tokenizer di dalam SentenceTransformer punya pad_token.
-    - Reuse eos/sep kalau ada
-    - Kalau tidak ada, tambahkan [PAD] dan resize embedding
-    """
-    tok = getattr(st_model, "tokenizer", None)
-    if tok is None:
+        """
+        Pastikan tokenizer di dalam SentenceTransformer punya pad_token.
+        - Reuse eos/sep kalau ada
+        - Kalau tidak ada, tambahkan [PAD]
+        """
+        tok = getattr(st_model, "tokenizer", None)
+        if tok is None:
+            try:
+                tok = st_model._first_module().tokenizer  # fallback lama
+            except Exception:
+                return
+        # Jika belum ada id, set token pad
         try:
-            tok = st_model._first_module().tokenizer  # fallback
+            if getattr(tok, "pad_token_id", None) in (None, -1):
+                if getattr(tok, "sep_token", None):
+                    tok.pad_token = tok.sep_token
+                elif getattr(tok, "eos_token", None):
+                    tok.pad_token = tok.eos_token
+                else:
+                    tok.pad_token = tok.pad_token or "[PAD]"
         except Exception:
-            return
-
-    # Safety: kalau id masih None/-1, set ulang
-    if getattr(tok, "pad_token_id", None) in (None, -1):
-        try:
-            tok.pad_token = tok.pad_token or "[PAD]"
-        except Exception:
+            # Diamkan saja, beberapa tokenizer read-only
             pass
-
+    # ==== END SHIM ====
 
 class SBERTEncoder(BaseEstimator, TransformerMixin):
     def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
@@ -2197,6 +2201,9 @@ elif pr_feature == "Sentiment + Technical":
     except Exception as e:
         st.error(f"Gagal menjalankan prediksi (Sentiment+Technical): {e}")
 
+# ==== MODEL DOWNLOADER (ambil dari st.secrets["MODEL_URL"] atau ENV) ====
+import re, hashlib
+
 def _normalize_gdrive_url(url: str) -> str:
     """
     Support 2 pola:
@@ -2205,10 +2212,8 @@ def _normalize_gdrive_url(url: str) -> str:
     """
     if not url:
         return url
-    # Jika sudah uc?id=...
     if "drive.google.com/uc?id=" in url:
         return url
-    # Ubah /file/d/<id>/view --> uc?id=<id>
     m = re.search(r"drive\.google\.com/file/d/([^/]+)/", url)
     if m:
         return f"https://drive.google.com/uc?id={m.group(1)}"
@@ -2228,34 +2233,34 @@ def _download_with_requests(url: str, dst_path: str):
         prog = st.progress(0.0) if total else None
         downloaded = 0
         with open(dst_path, "wb") as f:
-            for i, b in enumerate(r.iter_content(chunk_size=chunk)):
-                if b:
-                    f.write(b)
-                    if total:
-                        downloaded += len(b)
-                        prog.progress(min(1.0, downloaded / total))
+            for b in r.iter_content(chunk_size=chunk):
+                if not b:
+                    continue
+                f.write(b)
+                if total:
+                    downloaded += len(b)
+                    prog.progress(min(1.0, downloaded / total))
         if prog:
             prog.empty()
 
 def _download_model_once(model_url: str) -> str:
     """
     Download sekali lalu cache ke folder 'models/'. Return path lokal.
-    Prioritas: gdown (jika ada) -> requests.
+    Prioritas: gdown (jika ada) → requests.
     """
     os.makedirs(repo_path("models"), exist_ok=True)
     norm = _normalize_gdrive_url(model_url)
     local_name = _safe_filename_from_url(norm)
     local_path = repo_path("models", local_name)
+
     if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
         return local_path
 
     with st.spinner("⬇️ Downloading sentiment pipeline from MODEL_URL..."):
-        # 1) coba gdown jika tersedia (lebih andal untuk file besar GDrive)
         try:
-            import gdown  # pip install gdown
+            import gdown  # pastikan di requirements
             gdown.download(url=norm, output=local_path, quiet=False, fuzzy=True)
         except Exception:
-            # 2) fallback ke requests
             _download_with_requests(norm, local_path)
 
     if not os.path.exists(local_path) or os.path.getsize(local_path) == 0:
@@ -2264,13 +2269,13 @@ def _download_model_once(model_url: str) -> str:
 
 @st.cache_resource(show_spinner=False)
 def get_pipeline_local_path() -> str:
-    # Urutan prioritas: secrets → env var → error
     url = st.secrets.get("MODEL_URL") if hasattr(st, "secrets") else None
     if not url:
         url = os.environ.get("MODEL_URL", "").strip()
     if not url:
         raise RuntimeError("MODEL_URL tidak ditemukan di st.secrets atau ENV.")
     return _download_model_once(url)
+
 
 
 # =========================================
