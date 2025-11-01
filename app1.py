@@ -1172,7 +1172,7 @@ class SBERTEncoder(BaseEstimator, TransformerMixin):
 # =========================================================
 # FEATURE SET: TECHNICAL ONLY — (indikator teknikal saja)
 # =========================================================
-elif pr_feature == "Technical":
+if pr_feature == "Technical":
     st.write("---")
     st.subheader("📈 Technical-Only Prediction (Linear Regression)")
 
@@ -1548,7 +1548,7 @@ elif pr_feature == "Technical":
 # =========================================================
 # FEATURE SET: SENTIMENT + TECHNICAL
 # =========================================================
-elif pr_feature == "Sentiment + Technical":
+if pr_feature == "Sentiment + Technical":
     st.write("---")
     st.subheader("🧠🧮 Sentiment + Technical — News Description")
 
@@ -3302,7 +3302,7 @@ if pr_feature == "Sentiment":
 # =========================================================
 # FEATURE SET: TECHNICAL ONLY — (indikator teknikal saja)
 # =========================================================
-elif pr_feature == "Technical":
+if pr_feature == "Technical":
     st.write("---")
     st.subheader("📈 Technical-Only Prediction (Linear Regression)")
 
@@ -3678,7 +3678,7 @@ elif pr_feature == "Technical":
 # =========================================================
 # FEATURE SET: SENTIMENT + TECHNICAL
 # =========================================================
-elif pr_feature == "Sentiment + Technical":
+if pr_feature == "Sentiment + Technical":
     st.write("---")
     st.subheader("🧠🧮 Sentiment + Technical — News Description")
 
