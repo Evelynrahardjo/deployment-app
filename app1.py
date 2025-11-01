@@ -34,6 +34,8 @@ st.set_page_config(
 # =========================================
 # - Mencegah AttributeError pada artefak .joblib lama (config BERT, tokenizer _pad_token)
 # - Mencegah error SDPA BERT di torch/transformers versi baru
+
+# 1) Nonaktifkan requirement contiguous_qkv pada SDPA BERT (beberapa versi tak punya atribut ini)
 try:
     from transformers.models.bert.modeling_bert import BertSdpaSelfAttention as _BertSdpaSelfAttention
     if not hasattr(_BertSdpaSelfAttention, "require_contiguous_qkv"):
@@ -41,6 +43,7 @@ try:
 except Exception:
     pass
 
+# 2) Default fields yang sering hilang di artefak lama
 _HF_CFG_DEFAULTS = {
     "output_attentions": False,
     "output_hidden_states": False,
@@ -52,26 +55,18 @@ _HF_CFG_DEFAULTS = {
 }
 
 def _cfg_set_defaults(cfg):
-    try:
-        for k, v in _H F_CFG_DEFAULTS.items():  # ← spasi disini akan error, perbaiki di bawah
-            if not hasattr(cfg, k):
-                setattr(cfg, k, v)
-        if getattr(cfg, "return_dict", None) is None:
-            setattr(cfg, "return_dict", False)
-    except Exception:
-        pass
-# (Memperbaiki salah ketik kecil di atas)
-def _cfg_set_defaults(cfg):
+    """Set default flags agar artefak lama tetap kompatibel."""
     try:
         for k, v in _HF_CFG_DEFAULTS.items():
             if not hasattr(cfg, k):
                 setattr(cfg, k, v)
+        # Beberapa config punya return_dict=None → set ke False biar konsisten
         if getattr(cfg, "return_dict", None) is None:
             setattr(cfg, "return_dict", False)
     except Exception:
         pass
 
-# Patch BertConfig agar field default selalu ada
+# 3) Patch __init__ BertConfig supaya setiap instance langsung punya field default
 try:
     from transformers.models.bert.configuration_bert import BertConfig as _BertConfig
     _orig_init = _BertConfig.__init__
@@ -82,7 +77,8 @@ try:
 except Exception:
     pass
 
-# Shim modul lama: sentence_transformers.model_card
+# 4) Shim modul lama yang kadang direferensikan saat unpickle
+import sys, types
 if "sentence_transformers.model_card" not in sys.modules:
     _mc = types.ModuleType("sentence_transformers.model_card")
     class _ModelCard: ...
@@ -94,7 +90,7 @@ if "sentence_transformers.model_card" not in sys.modules:
     _mc.SentenceTransformerModelCardData = _SentenceTransformerModelCardData
     sys.modules["sentence_transformers.model_card"] = _mc
 
-# Shim untuk memastikan Base Tokenizer punya atribut privat
+# 5) Pastikan base tokenizer punya atribut privat yang diandalkan beberapa versi lama
 try:
     from transformers import PreTrainedTokenizerBase
     if not hasattr(PreTrainedTokenizerBase, "_unk_token"): PreTrainedTokenizerBase._unk_token = None
@@ -102,8 +98,9 @@ try:
 except Exception:
     pass
 
+# 6) Helper untuk memastikan config/tokenizer di SentenceTransformer aman
 def _ENSURE_ST_ENCODER_OK(st_model):
-    """Set defaults ke config model di dalam SentenceTransformer (idempotent)."""
+    """Tambahkan default config ke model inti di dalam SentenceTransformer."""
     try:
         first_mod = st_model._first_module() if hasattr(st_model, "_first_module") else None
         core = (getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None)) if first_mod is not None else None
@@ -114,25 +111,24 @@ def _ENSURE_ST_ENCODER_OK(st_model):
         pass
 
 def _ENSURE_BERT_SDPA_FOR_ST(st_model):
-    """Pastikan flags SDPA ke model HF di dalam SentenceTransformer."""
+    """Idempotent: panggil _ENSURE_ST_ENCODER_OK; tempatkan hook SDPA jika perlu."""
     try:
-        first_mod = st_model._first_module() if hasattr(st_model, "_first_module") else None
-        core = (getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None)) if first_mod is not None else None
-        core = core or getattr(st_model, "auto_model", None) or getattr(st_model, "model", None)
-        if core is not None:
-            _ENSURE_ST_ENCODER_OK(st_model)
+        _ENSURE_ST_ENCODER_OK(st_model)
     except Exception:
         pass
 
 def _ENSURE_PAD_TOKEN_FOR_ST_MODEL(st_model):
-    """Pastikan tokenizer punya pad_token/pad_token_id dan resize embeddings bila perlu."""
+    """Pastikan tokenizer punya pad_token/pad_token_id; resize embeddings jika vocab berubah."""
     try:
         tok = getattr(st_model, "tokenizer", None)
         if tok is None and hasattr(st_model, "_first_module"):
-            try: tok = st_model._first_module().tokenizer
-            except Exception: tok = None
+            try:
+                tok = st_model._first_module().tokenizer
+            except Exception:
+                tok = None
         if tok is None:
             return
+        # Set pad token bila kosong
         pad = getattr(tok, "pad_token", None)
         if pad in (None, "", "None"):
             if getattr(tok, "sep_token", None):
@@ -144,14 +140,22 @@ def _ENSURE_PAD_TOKEN_FOR_ST_MODEL(st_model):
                     tok.add_special_tokens({"pad_token": "[PAD]"})
                 except Exception:
                     setattr(tok, "_pad_token", "[PAD]")
-                    try: tok.pad_token = "[PAD]"
-                    except Exception: pass
+                    try:
+                        tok.pad_token = "[PAD]"
+                    except Exception:
+                        pass
+        # Pastikan pad_token_id ada
         if getattr(tok, "pad_token_id", None) is None:
-            try: tok.pad_token = tok.pad_token  # trigger resolve id
-            except Exception: pass
+            try:
+                tok.pad_token = tok.pad_token  # trigger resolve id
+            except Exception:
+                pass
             if getattr(tok, "pad_token_id", None) is None:
-                try: setattr(tok, "pad_token_id", 0)
-                except Exception: pass
+                try:
+                    setattr(tok, "pad_token_id", 0)
+                except Exception:
+                    pass
+        # Resize embeddings jika diperlukan
         try:
             vocab_len = len(tok)
             first_mod = st_model._first_module() if hasattr(st_model, "_first_module") else None
@@ -164,10 +168,12 @@ def _ENSURE_PAD_TOKEN_FOR_ST_MODEL(st_model):
     except Exception:
         pass
 
+# 7) Ekspos helper ke global (dipakai di kelas SBERTEncoder)
 globals()["_CFG_SET_DEFAULTS"] = _cfg_set_defaults
 globals()["_ENSURE_ST_ENCODER_OK"] = _ENSURE_ST_ENCODER_OK
 globals()["_ENSURE_PAD_TOKEN_FOR_ST_MODEL"] = _ENSURE_PAD_TOKEN_FOR_ST_MODEL
 globals()["_ENSURE_BERT_SDPA_FOR_ST"] = _ENSURE_BERT_SDPA_FOR_ST
+
 
 # =========================================
 # PATH & THEME
