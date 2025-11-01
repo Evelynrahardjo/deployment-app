@@ -1,4 +1,14 @@
 # %%writefile app.py
+# ==== Ultra-early COMPAT SHIM (untuk artefak .joblib lama) ====
+import sys, types
+
+# Pastikan modul palsu tersedia sebelum unpickle
+if "sentence_transformers.model_card" not in sys.modules:
+    _mc = types.ModuleType("sentence_transformers.model_card")
+    _mc.ModelCard = type("ModelCard", (), {})  # placeholder class
+    sys.modules["sentence_transformers.model_card"] = _mc
+# ==== END SHIM ====
+
 # =========================================
 # IMPORTS
 # =========================================
