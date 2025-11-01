@@ -592,65 +592,44 @@ if pr_feature == "Sentiment":
     # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
   # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
 
+# ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
+try:
+    import sentence_transformers.model_card  # ✅ kalau modulnya ada, lanjut normal
+except Exception:
+    mc = types.ModuleType("sentence_transformers.model_card")
+    class ModelCard:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+    class SentenceTransformerModelCard(ModelCard):
+        pass
+    mc.ModelCard = ModelCard
+    mc.SentenceTransformerModelCard = SentenceTransformerModelCard
+    sys.modules["sentence_transformers.model_card"] = mc
+# ==== END PATCH ====
+
+
+@st.cache_resource(show_spinner=True)
+def load_pipeline(path_joblib: str):
+    import joblib
+    if not os.path.exists(path_joblib):
+        raise FileNotFoundError(
+            f"File pipeline tidak ditemukan: {path_joblib}. "
+            "Pastikan telah menyimpan/unggah 'sentiment_pipeline_sbert_linsvc.joblib'."
+        )
+    pipe = joblib.load(path_joblib)
+    return pipe
+
+
+def predict_sentiment(pipe, txt: str):
+    pred = pipe.predict([txt])[0]
     try:
-        import sentence_transformers.model_card  # ✅ kalau modulnya ada, lanjut normal
+        margins = pipe.decision_function([txt])
+        score = float(np.max(margins if getattr(margins, "ndim", 1) == 1 else margins[0]))
     except Exception:
-        mc = types.ModuleType("sentence_transformers.model_card")
-        class ModelCard:
-            def __init__(self, **kwargs):
-                for k, v in kwargs.items():
-                    setattr(self, k, v)
-        class SentenceTransformerModelCard(ModelCard):
-            pass
-        mc.ModelCard = ModelCard
-        mc.SentenceTransformerModelCard = SentenceTransformerModelCard
-        sys.modules["sentence_transformers.model_card"] = mc
-    # ==== END PATCH ====
-    
-    
-    @st.cache_resource(show_spinner=True)
-    def load_pipeline(path_joblib: str):
-        import joblib
-        if not os.path.exists(path_joblib):
-            raise FileNotFoundError(
-                f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
-            )
-        pipe = joblib.load(path_joblib)
-        return pipe
+        score = None
+    return pred, score
 
-    
-    @st.cache_resource(show_spinner=True)
-    def load_pipeline(path_joblib: str):
-        import joblib
-        if not os.path.exists(path_joblib):
-            raise FileNotFoundError(
-                f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
-            )
-        pipe = joblib.load(path_joblib)
-        return pipe
-
-
-    
-    def load_pipeline(path_joblib: str):
-        import joblib
-        if not os.path.exists(path_joblib):
-            raise FileNotFoundError(
-                f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
-            )
-        pipe = joblib.load(path_joblib)
-        return pipe
-
-    def predict_sentiment(pipe, txt: str):
-        pred = pipe.predict([txt])[0]
-        try:
-            margins = pipe.decision_function([txt])
-            score = float(np.max(margins if getattr(margins, "ndim", 1) == 1 else margins[0]))
-        except Exception:
-            score = None
-        return pred, score
 
     if run_predict_btn:
         if not user_text.strip():
