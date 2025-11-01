@@ -2798,12 +2798,12 @@ button[aria-label="Toggle sidebar"]:hover, [data-testid="collapsedControl"]:hove
 # =========================================
 # NAVIGATION
 # =========================================
-page = st.sidebar.radio(
-    "Navigation",
-    options=["🏠 Home","📊 Dashboard","🧮 Prediction Request and Results"],
-    index=1,
-    label_visibility="collapsed",
-)
+#page = st.sidebar.radio(
+    #"Navigation",
+    #options=["🏠 Home","📊 Dashboard","🧮 Prediction Request and Results"],
+    #index=1,
+   # label_visibility="collapsed",
+#)
 
 # =========================================
 # HOME
