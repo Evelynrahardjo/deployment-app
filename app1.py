@@ -1,18 +1,33 @@
-# %%writefile app.py
-# ==== Ultra-early COMPAT SHIM (untuk artefak .joblib lama) ====
+# ==== Ultra-early COMPAT SHIM untuk artefak .joblib lama (JANGAN HAPUS) ====
 import sys, types
 
-# Pastikan modul palsu tersedia sebelum unpickle
+# Buat modul palsu `sentence_transformers.model_card` jika belum ada
 if "sentence_transformers.model_card" not in sys.modules:
     _mc = types.ModuleType("sentence_transformers.model_card")
-    _mc.ModelCard = type("ModelCard", (), {})  # placeholder class
+
+    # Placeholder minimal yang cukup untuk proses unpickle
+    class _ModelCard: ...
+    class _SentenceTransformerModelCardData:
+        # Beberapa artefak lama mengakses atribut seperti .modelId, .revision, dll.
+        # Kita sediakan default agar aman dibaca tapi tidak dipakai.
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+
+    _mc.ModelCard = _ModelCard
+    _mc.SentenceTransformerModelCardData = _SentenceTransformerModelCardData
+
     sys.modules["sentence_transformers.model_card"] = _mc
 # ==== END SHIM ====
+
 
 # =========================================
 # IMPORTS
 # =========================================
 import os
+import re
+import hashlib
+import tempfile
 import streamlit as st
 import pandas as pd
 import numpy as np
