@@ -19,6 +19,35 @@ st.set_page_config(
 # ==== ULTRA-EARLY COMPAT SHIM (JANGAN HAPUS) ====
 
 # ==== ULTRA-EARLY HF COMPAT (letakkan PALING ATAS, sebelum import SentenceTransformer / joblib) ====
+# ==== ULTRA-EARLY HF/SDPA COMPAT (tempel PALING ATAS) ====
+try:
+    # 1) Set default di level kelas (menutup gap versi)
+    from transformers.models.bert.modeling_bert import BertSdpaSelfAttention as _BertSdpaSelfAttention
+    if not hasattr(_BertSdpaSelfAttention, "require_contiguous_qkv"):
+        _BertSdpaSelfAttention.require_contiguous_qkv = False
+except Exception:
+    pass
+
+def _ENSURE_BERT_SDPA_FLAGS(model):
+    """Pastikan setiap instance BertSdpaSelfAttention punya flag yang dibutuhkan."""
+    try:
+        from transformers.models.bert.modeling_bert import BertSdpaSelfAttention as _BertSdpaSelfAttention
+    except Exception:
+        return
+    try:
+        for m in getattr(model, "modules", lambda: [])():
+            if isinstance(m, _BertSdpaSelfAttention) and not hasattr(m, "require_contiguous_qkv"):
+                setattr(m, "require_contiguous_qkv", False)
+    except Exception:
+        pass
+# ==== END ULTRA-EARLY ====
+
+# setelah self._encoder = SentenceTransformer(...):
+_ENSURE_BERT_SDPA_FLAGS(self._encoder._first_module().auto_model if hasattr(self._encoder, "_first_module") else self._encoder)
+# atau kalau kamu sudah punya helper _ENSURE_ST_ENCODER_OK, kamu bisa panggil di sana juga:
+# _ENSURE_ST_ENCODER_OK(self._encoder); _ENSURE_BERT_SDPA_FLAGS(core_model)
+
+
 import sys, types
 
 _HF_CFG_DEFAULTS = {
