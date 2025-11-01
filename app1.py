@@ -190,30 +190,40 @@ st.markdown("""
 <style>
 /* ====== Header ====== */
 header, [data-testid="stHeader"]{
-  background-color:#f6f0ff !important; color:#000 !important; border-bottom:1px solid #e3d7ff;
+  background:#f6f0ff !important;
+  color:#000 !important;
+  border-bottom:1px solid #e3d7ff;
 }
 
 /* ====== Body & Sidebar ====== */
 .stApp{ background:#f6f0ff; color:#000 !important; }
-[data-testid="stSidebar"]{ background:#d9caff; color:#000; padding-top:.5rem; }
+[data-testid="stSidebar"]{
+  background:#d9caff; color:#000; padding-top:.5rem;
+}
 [data-testid="stSidebar"] [role="radiogroup"]>div>div:first-child{ display:none !important; }
 [data-testid="stSidebar"] *{ color:#000 !important; font-weight:600; font-size:17px; }
 
 /* ====== Labels & Radio text ====== */
-label, .stRadio label p, .stDateInput label p, .stSelectbox label p{ color:#000 !important; font-weight:600 !important; }
+label, .stRadio label p, .stDateInput label p, .stSelectbox label p{
+  color:#000 !important; font-weight:600 !important;
+}
 .stRadio div[role="radio"] p{ color:#000 !important; font-weight:600 !important; }
 
 /* ====== Inputs (field gelap -> teks putih) ====== */
 .stDateInput input,
-.stSelectbox [data-baseweb="select"] input{ color:#fff !important; }
+.stSelectbox [data-baseweb="select"] input{
+  color:#fff !important;
+}
 .stDateInput input::placeholder,
-.stSelectbox [data-baseweb="select"] input::placeholder{ color:#e5e7eb !important; }
+.stSelectbox [data-baseweb="select"] input::placeholder{
+  color:#e5e7eb !important;
+}
 
 /* ====== Headings & Links ====== */
-h1,h2,h3{ color:#5b21b6 !important; } 
+h1,h2,h3{ color:#5b21b6 !important; }
 a, a:visited, a:hover{ color:#111 !important; }
 
-/* ====== Buttons (SEMUA tombol -> teks PUTIH) ====== */
+/* ====== Buttons | SEMUA tombol -> TEKS PUTIH ====== */
 .stButton>button,
 .stDownloadButton>button,
 [data-testid="stBaseButton-secondary"],
@@ -222,21 +232,19 @@ a, a:visited, a:hover{ color:#111 !important; }
 [data-testid="baseButton-primary"],
 button[kind="secondary"],
 button[kind="primary"]{
-  color:#fff !important;                        /* TEKS PUTIH */
-  background:#1f2937 !important;                /* gelap */
+  color:#fff !important;
+  background:#1f2937 !important;
   border:1px solid #bfa8ff !important;
   border-radius:10px !important;
   font-weight:700 !important;
   box-shadow:none !important;
 }
-/* pastikan anak-anak di dalam button juga putih */
-.stButton>button *, 
+.stButton>button *,
 .stDownloadButton>button *,
-[data-testid="stBaseButton-secondary"] *, 
+[data-testid="stBaseButton-secondary"] *,
 [data-testid="stBaseButton-primary"] *{
   color:#fff !important; fill:#fff !important; stroke:#fff !important;
 }
-/* Hover/Focus */
 .stButton>button:hover,
 .stDownloadButton>button:hover,
 [data-testid="stBaseButton-secondary"]:hover,
@@ -254,29 +262,59 @@ button[kind="primary"]:hover{
 .stTextArea textarea{ color:#fff !important; }
 .stTextArea textarea::placeholder{ color:#e5e7eb !important; opacity:1 !important; }
 
-/* ====== ALERT/INFO/SUCCESS/ERROR text jadi hitam ====== */
+/* ====== Alerts/Info/Success/Error -> teks hitam ====== */
 [data-testid="stNotification"], .stAlert, .stAlert *{ color:#000 !important; }
 
-/* ====== Markdown/Caption default tetap HITAM ====== */
-[data-testid="stMarkdownContainer"], 
+/* ====== Markdown & Caption default -> teks hitam ====== */
+[data-testid="stMarkdownContainer"],
 [data-testid="stMarkdownContainer"] *{ color:#000 !important; }
 [data-testid="stExpander"], [data-testid="stExpander"] *{ color:#000 !important; }
 [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] *{ color:#000 !important; }
 [data-testid="stHelp"], [data-testid="stHelp"] *{ color:#000 !important; }
 
-/* ====== Metric kecil ====== */
-[data-testid="stMetricValue"], [data-testid="stMetricDelta"], [data-testid="stMetricLabel"],
-[data-testid="stMetricValue"] *, [data-testid="stMetricDelta"] *, [data-testid="stMetricLabel"] *{ color:#000 !important; }
+/* ====== Inline code (backticks) & code blocks -> TEKS PUTIH ====== */
+[data-testid="stMarkdownContainer"] code,
+[data-testid="stCaptionContainer"] code,
+code{
+  color:#fff !important;
+  background:#1f2937 !important;
+  border:1px solid #bfa8ff !important;
+  border-radius:8px !important;
+  padding:2px 6px !important;
+  font-weight:700 !important;
+}
+pre, pre code{
+  color:#fff !important;
+  background:#0f172a !important;
+  border:1px solid #bfa8ff !important;
+  border-radius:10px !important;
+  padding:10px 12px !important;
+}
 
-/* Plotly tooltips */
-.js-plotly-plot, .js-plotly-plot *{ color:#000 !important; }
+/* ====== Metric kecil ====== */
+[data-testid="stMetricValue"],
+[data-testid="stMetricDelta"],
+[data-testid="stMetricLabel"],
+[data-testid="stMetricValue"] *,
+[data-testid="stMetricDelta"] *,
+[data-testid="stMetricLabel"] *{
+  color:#000 !important;
+}
 
 /* ====== Utility badge untuk angka model (MAE/RMSE/R²) ====== */
 .metric-line{
-  display:inline-block; color:#fff !important; background:#1f2937 !important;
-  padding:6px 10px; border-radius:10px; font-weight:700; border:1px solid #bfa8ff;
+  display:inline-block;
+  color:#fff !important;
+  background:#1f2937 !important;
+  padding:6px 10px;
+  border-radius:10px;
+  font-weight:700;
+  border:1px solid #bfa8ff;
 }
 .metric-line *{ color:#fff !important; }
+
+/* ====== Plotly tooltips & modebar ====== */
+.js-plotly-plot, .js-plotly-plot *{ color:#000 !important; }
 
 /* ====== Misc ====== */
 .block-container{ padding-top:1.2rem; }
