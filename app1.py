@@ -247,6 +247,94 @@ button[aria-label="Toggle sidebar"]:hover, [data-testid="collapsedControl"]:hove
 </style>
 """, unsafe_allow_html=True)
 
+#######################
+st.markdown("""
+    <style>
+    /* GLOBAL PAGE SPACING */
+    h1, h2, h3, h4, h5, h6 {
+        margin-top: 0.6rem !important;
+        margin-bottom: 0.4rem !important;
+    }
+    p, ul, li {
+        margin-top: 0.1rem !important;
+        margin-bottom: 0.1rem !important;
+        line-height: 1.35 !important;
+    }
+
+    /* BULLET LIST (Bank list + Feature Set) */
+    ul {
+        padding-left: 1.5rem !important;
+    }
+    li {
+        margin: 0.15rem 0 !important;
+    }
+
+    /* HR Line slim and tight */
+    hr {
+        margin: 0.4rem 0 !important;
+        border: none;
+        border-top: 1px solid rgba(0,0,0,0.15);
+    }
+
+    /* WINDOW + DISCLAIMER block */
+    #window-block {
+        margin-top: 0.3rem !important;
+        margin-bottom: 0.2rem !important;
+    }
+    #window-block p {
+        margin: 0.15rem 0 !important;
+    }
+    #window-block .disc {
+        color: #6b7280;
+        font-size: 0.9rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # === Intro ===
+    st.write("""
+    Selamat datang di **Indonesia Banking Stock Prediction**.
+    Di sini kamu dapat melakukan eksplorasi dan *modeling* prediksi harga untuk 4 bank besar Indonesia:
+    """)
+
+    # === Bank list ===
+    st.markdown("""
+    <ul>
+        <li><b>BBCA.JK</b></li>
+        <li><b>BMRI.JK</b></li>
+        <li><b>BBRI.JK</b></li>
+        <li><b>BDMN.JK</b></li>
+    </ul>
+    """, unsafe_allow_html=True)
+
+    # === Feature Set ===
+    st.markdown("### 🔧 Feature Set yang tersedia")
+    st.markdown("""
+    <ul>
+        <li><b>Sentiment</b> — bisa memasukkan manual dan memprediksi sentimen dari deskripsi berita
+        (Indonesia/Inggris, opsional auto-translate), lalu assign ke tanggal untuk dipakai model.</li>
+        <li><b>Technical</b> — indikator yang digunakan:
+        <b>SMA</b>, <b>EMA</b>, <b>Price Change %</b>, <b>Volatility</b> (High–Low), <b>RSI</b>, dan <b>Avg Volume</b>.</li>
+        <li><b>Sentiment + Technical</b> — kombinasi <b>count sentimen</b> (Positive/Negative/Neutral)
+        dan <b>indikator teknikal</b> di atas untuk prediksi.</li>
+    </ul>
+    """, unsafe_allow_html=True)
+
+    # === Opsi Window & Disclaimer ===
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown("""
+    <div id="window-block">
+        <p style="font-size:16px; font-weight:600;">
+            Opsi <em>window</em> yang tersedia: <b>1, 3, 5, 7, 14</b> (hari).
+        </p>
+        <p class="disc">
+            <b>Disclaimer:</b> Bukan financial advice; hanya untuk riset &amp; pemodelan akademik.
+        </p>
+    </div>
+    <hr>
+    """, unsafe_allow_html=True)
+#################
+
 # =========================================
 # UTIL: TRANSLATOR (opsional)
 # =========================================
