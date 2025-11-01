@@ -662,10 +662,10 @@ if pr_feature == "Sentiment":
 
 
     from sklearn.base import BaseEstimator, TransformerMixin
-        try:
-            from sentence_transformers import SentenceTransformer
-        except Exception:
-            SentenceTransformer = None
+    try:
+        from sentence_transformers import SentenceTransformer
+    except Exception:
+        SentenceTransformer = None
     
     class SBERTEncoder(BaseEstimator, TransformerMixin):
         def __init__(self,
@@ -2835,29 +2835,6 @@ if pr_feature == "Sentiment":
     except Exception as e:
         SentenceTransformer = None  # biar app tetap jalan kalau lib belum ada
 
-    class SBERTEncoder(BaseEstimator, TransformerMixin):
-        def __init__(self,
-                     model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-                     batch_size=64,
-                     normalize_embeddings=True,
-                     device=None):
-            if SentenceTransformer is None:
-                raise ImportError("Missing sentence-transformers. Install dulu: pip install -q sentence-transformers")
-            self.model_name = model_name
-            self.batch_size = batch_size
-            self.normalize_embeddings = normalize_embeddings
-            self.device = device
-            self._encoder = SentenceTransformer(self.model_name, device=self.device)
-
-        def fit(self, X, y=None): return self
-        def transform(self, X):
-            texts = pd.Series(X).astype(str).tolist()
-            embs = self._encoder.encode(
-                texts, batch_size=self.batch_size, show_progress_bar=False,
-                convert_to_numpy=True, normalize_embeddings=self.normalize_embeddings,
-            )
-            return embs
-
     @st.cache_resource(show_spinner=False)
     def _get_translator():
         try:
@@ -3772,28 +3749,6 @@ elif pr_feature == "Sentiment + Technical":
     except Exception:
         SentenceTransformer = None
 
-    class SBERTEncoder(BaseEstimator, TransformerMixin):
-        def __init__(self,
-                     model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-                     batch_size=64,
-                     normalize_embeddings=True,
-                     device=None):
-            if SentenceTransformer is None:
-                raise ImportError("Missing sentence-transformers. Install: pip install -q sentence-transformers")
-            self.model_name = model_name
-            self.batch_size = batch_size
-            self.normalize_embeddings = normalize_embeddings
-            self.device = device
-            self._encoder = SentenceTransformer(self.model_name, device=self.device)
-
-        def fit(self, X, y=None): return self
-        def transform(self, X):
-            texts = pd.Series(X).astype(str).tolist()
-            embs = self._encoder.encode(
-                texts, batch_size=self.batch_size, show_progress_bar=False,
-                convert_to_numpy=True, normalize_embeddings=self.normalize_embeddings,
-            )
-            return embs
 
     @st.cache_resource(show_spinner=False)
     def _get_translator():
