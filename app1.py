@@ -146,6 +146,25 @@ def get_pipeline_local_path() -> str:
     if not url:
         raise RuntimeError("MODEL_URL tidak ditemukan di st.secrets atau ENV.")
     return _download_model_once(url)
+# ==== Translator helpers (global, sekali saja) ====
+import streamlit as st
+
+@st.cache_resource(show_spinner=False)
+def get_translator():
+    try:
+        from googletrans import Translator  # pip install googletrans==4.0.0-rc1
+        return Translator()
+    except Exception:
+        return None
+
+def safe_translate_to_en(text: str) -> str:
+    tr = get_translator()
+    if tr is None:
+        return text
+    try:
+        return tr.translate(text, dest="en").text
+    except Exception:
+        return text
 
 # =========================================
 # CONFIG & THEME
