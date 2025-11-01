@@ -20,6 +20,9 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 # =========================================
 # IMPORTS
 # =========================================
+# =========================================
+# IMPORTS
+# =========================================
 import os
 import streamlit as st
 import pandas as pd
@@ -33,6 +36,38 @@ APP_DIR = Path(__file__).parent.resolve()
 def repo_path(*parts: str) -> str:
     """Build absolute path safely for Streamlit Cloud or local."""
     return str(APP_DIR.joinpath(*parts))
+
+# ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
+import sys, types
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+# 1) Shim utk artefak lama yg refer ke 'sentence_transformers.model_card'
+try:
+    import sentence_transformers as _st
+    if "sentence_transformers.model_card" not in sys.modules:
+        mc = types.ModuleType("sentence_transformers.model_card")
+        class ModelCard:
+            def __init__(self, *a, **k): pass
+        mc.ModelCard = ModelCard
+        sys.modules["sentence_transformers.model_card"] = mc
+except Exception:
+    pass
+
+# 2) Shim utk util lama
+try:
+    import sentence_transformers.util as _st_util
+except Exception:
+    util_mod = types.ModuleType("sentence_transformers.util")
+    sys.modules["sentence_transformers.util"] = util_mod
+
+# 3) Shim utk perubahan atribut tokenizer: '_pad_token' → 'pad_token'
+try:
+    from transformers import PreTrainedTokenizerFast
+    if not hasattr(PreTrainedTokenizerFast, "_pad_token"):
+        PreTrainedTokenizerFast._pad_token = property(lambda self: self.pad_token)
+except Exception:
+    pass
+
 
 # =========================================
 # CONFIG & THEME
@@ -588,14 +623,24 @@ if pr_feature == "Sentiment":
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        import joblib
+        import joblib, traceback
         if not os.path.exists(path_joblib):
             raise FileNotFoundError(
                 f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
+                "Pastikan sudah mengunggah 'sentiment_pipeline_sbert_linsvc.joblib'."
             )
-        pipe = joblib.load(path_joblib)
-        return pipe
+        try:
+            return joblib.load(path_joblib)
+        except Exception as e:
+            st.error("Gagal membaca pipeline (pickle incompatibility). "
+                     "Coba versi: sentence-transformers==2.2.2, transformers==4.41.1, "
+                     "tokenizers==0.13.3, scikit-learn==1.3.2, torch==2.2.2")
+            st.caption("Compat shims sudah diaktifkan di awal file. "
+                       "Jika tetap gagal, re-save pipeline dgn class & versi yang match.")
+            # opsional: tampilkan traceback ringkas untuk debugging
+            st.code("".join(traceback.format_exception_only(type(e), e)).strip())
+            raise
+
 
     def predict_sentiment(pipe, txt: str):
         pred = pipe.predict([txt])[0]
@@ -1524,14 +1569,24 @@ elif pr_feature == "Sentiment + Technical":
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        import joblib
+        import joblib, traceback
         if not os.path.exists(path_joblib):
             raise FileNotFoundError(
                 f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
+                "Pastikan sudah mengunggah 'sentiment_pipeline_sbert_linsvc.joblib'."
             )
-        pipe = joblib.load(path_joblib)
-        return pipe
+        try:
+            return joblib.load(path_joblib)
+        except Exception as e:
+            st.error("Gagal membaca pipeline (pickle incompatibility). "
+                     "Coba versi: sentence-transformers==2.2.2, transformers==4.41.1, "
+                     "tokenizers==0.13.3, scikit-learn==1.3.2, torch==2.2.2")
+            st.caption("Compat shims sudah diaktifkan di awal file. "
+                       "Jika tetap gagal, re-save pipeline dgn class & versi yang match.")
+            # opsional: tampilkan traceback ringkas untuk debugging
+            st.code("".join(traceback.format_exception_only(type(e), e)).strip())
+            raise
+
 
     def predict_sentiment(pipe, txt: str):
         pred = pipe.predict([txt])[0]
