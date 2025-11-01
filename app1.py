@@ -698,15 +698,9 @@ class SBERTEncoder(BaseEstimator, TransformerMixin):
 
 
     @st.cache_resource(show_spinner=False)
-    def _get_translator():
-        try:
-            from googletrans import Translator  # pip install googletrans==4.0.0-rc1
-            return Translator()
-        except Exception:
-            return None
 
     def safe_translate_to_en(text: str) -> str:
-        tr = _get_translator()
+        tr = get_translator()
         if tr is None:
             return text
         try:
@@ -1638,15 +1632,9 @@ if pr_feature == "Sentiment + Technical":
             return embs
 
     @st.cache_resource(show_spinner=False)
-    def _get_translator():
-        try:
-            from googletrans import Translator  # pip install googletrans==4.0.0-rc1
-            return Translator()
-        except Exception:
-            return None
 
     def safe_translate_to_en(text: str) -> str:
-        tr = _get_translator()
+        tr = get_translator()
         if tr is None:
             return text
         try:
@@ -2830,15 +2818,8 @@ if pr_feature == "Sentiment":
         SentenceTransformer = None  # biar app tetap jalan kalau lib belum ada
 
     @st.cache_resource(show_spinner=False)
-    def _get_translator():
-        try:
-            from googletrans import Translator  # pip install googletrans==4.0.0-rc1
-            return Translator()
-        except Exception:
-            return None
-
     def safe_translate_to_en(text: str) -> str:
-        tr = _get_translator()
+        tr = get_translator()
         if tr is None:
             return text
         try:
@@ -3745,15 +3726,9 @@ if pr_feature == "Sentiment + Technical":
 
 
     @st.cache_resource(show_spinner=False)
-    def _get_translator():
-        try:
-            from googletrans import Translator  # pip install googletrans==4.0.0-rc1
-            return Translator()
-        except Exception:
-            return None
 
     def safe_translate_to_en(text: str) -> str:
-        tr = _get_translator()
+        tr = get_translator()
         if tr is None:
             return text
         try:
