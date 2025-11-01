@@ -17,6 +17,117 @@ st.set_page_config(
 # ==== Ultra-early COMPAT SHIM untuk artefak .joblib lama (JANGAN HAPUS) ====
 # ==== ULTRA-EARLY HF TOKENIZER COMPAT (JANGAN HAPUS) ====
 # ==== ULTRA-EARLY COMPAT SHIM (JANGAN HAPUS) ====
+
+# ==== ULTRA-EARLY HF CONFIG COMPAT (PASTE DI PALING ATAS, SEBELUM LOAD MODEL) ====
+import sys, types
+
+# Default flags yang sering hilang pada artefak lama
+_HF_CFG_DEFAULTS = {
+    "output_attentions": False,
+    "output_hidden_states": False,
+    "return_dict": False,
+    "is_decoder": False,
+    "add_cross_attention": False,
+    "use_cache": False,
+    "torchscript": False,
+}
+
+def _cfg_set_defaults(cfg):
+    try:
+        for k, v in _HF_CFG_DEFAULTS.items():
+            if not hasattr(cfg, k):
+                setattr(cfg, k, v)
+        # beberapa artefak lama menyetel return_dict=None
+        if getattr(cfg, "return_dict", None) is None:
+            setattr(cfg, "return_dict", False)
+    except Exception:
+        pass
+
+# 1) Patch kelas BertConfig agar instance baru SELALU punya field di atas
+try:
+    from transformers.models.bert.configuration_bert import BertConfig as _BertConfig
+    _orig_init = _BertConfig.__init__
+    def _patched_init(self, *a, **kw):
+        _orig_init(self, *a, **kw)
+        _cfg_set_defaults(self)
+    _BertConfig.__init__ = _patched_init
+except Exception:
+    pass
+
+# 2) Helper untuk “menyehatkan” SentenceTransformer yang sudah ter-load
+def _ensure_st_encoder_ok(st_model):
+    """
+    Tambah defaults di config model inti (AutoModel/bert) & amankan pad_token tokenizer.
+    Aman dipanggil berulang kali.
+    """
+    try:
+        # cari modul pertama (Transformer)
+        first_mod = getattr(st_model, "_first_module")() if hasattr(st_model, "_first_module") else None
+        core = None
+        if first_mod is not None:
+            core = getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None)
+        # kalau lewat atribut langsung
+        if core is None:
+            core = getattr(st_model, "auto_model", None) or getattr(st_model, "model", None)
+        if core is not None and hasattr(core, "config"):
+            _cfg_set_defaults(core.config)
+    except Exception:
+        pass
+
+# 3) (Opsional tapi aman) – pastikan tokenizer punya pad_token agar encode tidak error di varian HF tertentu
+def _ensure_pad_token_for_st_model(st_model):
+    try:
+        tok = getattr(st_model, "tokenizer", None)
+        if tok is None and hasattr(st_model, "_first_module"):
+            try:
+                tok = st_model._first_module().tokenizer
+            except Exception:
+                tok = None
+        if tok is None:
+            return
+        # set pad_token jika hilang
+        pad = getattr(tok, "pad_token", None)
+        if pad in (None, "", "None"):
+            if getattr(tok, "sep_token", None):
+                tok.pad_token = tok.sep_token
+            elif getattr(tok, "eos_token", None):
+                tok.pad_token = tok.eos_token
+            else:
+                try:
+                    tok.add_special_tokens({"pad_token": "[PAD]"})
+                except Exception:
+                    setattr(tok, "_pad_token", "[PAD]")
+                    try: tok.pad_token = "[PAD]"
+                    except Exception: pass
+        # pastikan pad_token_id integer
+        if getattr(tok, "pad_token_id", None) is None:
+            try:
+                tok.pad_token = tok.pad_token  # trigger refresh id
+            except Exception:
+                pass
+            if getattr(tok, "pad_token_id", None) is None:
+                try: setattr(tok, "pad_token_id", 0)
+                except Exception: pass
+        # resize embedding jika nambah special token
+        try:
+            vocab_len = len(tok)
+            first_mod = st_model._first_module() if hasattr(st_model, "_first_module") else None
+            core = getattr(first_mod, "auto_model", None) if first_mod is not None else None
+            core = core or getattr(st_model, "auto_model", None) or getattr(st_model, "model", None)
+            if core is not None and hasattr(core, "resize_token_embeddings"):
+                core.resize_token_embeddings(vocab_len)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+# 4) Jadikan helper global agar bisa dipanggil setelah unpickle
+globals()["_CFG_SET_DEFAULTS"] = _cfg_set_defaults
+globals()["_ENSURE_ST_ENCODER_OK"] = _ensure_st_encoder_ok
+globals()["_ENSURE_PAD_TOKEN_FOR_ST_MODEL"] = _ensure_pad_token_for_st_model
+# ==== END ULTRA-EARLY HF CONFIG COMPAT ====
+
+
 import sys, types
 # Shim artefak joblib lama yang refer ke sentence_transformers.model_card
 if "sentence_transformers.model_card" not in sys.modules:
@@ -808,16 +919,16 @@ if pr_feature == "Sentiment":
             self.device = device
     
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
-            _ensure_pad_token_for_st_model(self._encoder)           # ✅ tokenizer aman
-            _ensure_transformer_config_defaults(self._encoder)  # <<< PENTING
+            _ENSURE_PAD_TOKEN_FOR_ST_MODEL(self._encoder)   # ✅ tokenizer aman
+            _ENSURE_ST_ENCODER_OK(self._encoder)      <<< PENTING
     
         def transform(self, X):
             import pandas as pd
             texts = pd.Series(X).astype(str).tolist()
     
             # panggil lagi (idempotent) sebelum encode
-            _ensure_pad_token_for_st_model(self._encoder)
-            _ensure_transformer_config_defaults(self._encoder)      # ✅ PENTING
+            _ENSURE_PAD_TOKEN_FOR_ST_MODEL(self._encoder)
+            _ENSURE_ST_ENCODER_OK(self._encoder)   # ✅ PENTING
     
             embs = self._encoder.encode(
                 texts,
@@ -897,6 +1008,37 @@ if pr_feature == "Sentiment":
         if not url:
             raise RuntimeError("MODEL_URL tidak ditemukan di st.secrets atau ENV.")
         return _download_model_once(url)
+
+    
+    def _post_load_fix(pipe):
+        # perbaiki kalau di dalam pipeline ada encoder SBERT lama
+        def _fix_obj(obj):
+            try:
+                enc = getattr(obj, "_encoder", None)
+                if enc is not None:
+                    _ENSURE_PAD_TOKEN_FOR_ST_MODEL(enc)
+                    _ENSURE_ST_ENCODER_OK(enc)
+            except Exception:
+                pass
+    
+        _fix_obj(pipe)
+        for attr in ("named_steps", "steps"):
+            comp = getattr(pipe, attr, None)
+            if comp:
+                try:
+                    items = comp.items() if hasattr(comp, "items") else comp
+                    for it in items:
+                        step = it[1] if isinstance(it, tuple) and len(it) == 2 else it
+                        _fix_obj(step)
+                except Exception:
+                    pass
+        return pipe
+    
+    # Saat load:
+    import joblib
+    pipe = _post_load_fix(joblib.load(PATH_PIPELINE))
+
+
     
     # ==== LOAD PIPELINE (PENTING: register alias dulu) ====
     @st.cache_resource(show_spinner=True)
@@ -1829,8 +1971,8 @@ if pr_feature == "Sentiment + Technical":
             self.device = device
     
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
-            _ensure_pad_token_for_st_model(self._encoder)           # ✅ tokenizer aman
-            _ensure_transformer_config_defaults(self._encoder)  # <<< PENTING
+            _ENSURE_PAD_TOKEN_FOR_ST_MODEL(self._encoder)   # ✅ tokenizer aman
+            _ENSURE_ST_ENCODER_OK(self._encoder)   # <<< PENTING
       # ✅ INI YANG PENTING
     
         def transform(self, X):
@@ -1838,8 +1980,8 @@ if pr_feature == "Sentiment + Technical":
             texts = pd.Series(X).astype(str).tolist()
     
             # panggil lagi (idempotent) sebelum encode
-            _ensure_pad_token_for_st_model(self._encoder)
-            _ensure_transformer_config_defaults(self._encoder)      # ✅ PENTING
+            _ENSURE_PAD_TOKEN_FOR_ST_MODEL(self._encoder)
+            _ENSURE_ST_ENCODER_OK(self._encoder)  # ✅ PENTING
     
             embs = self._encoder.encode(
                 texts,
