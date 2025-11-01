@@ -1,26 +1,25 @@
-# pyarrow: HINDARI kalau tidak dipakai
+# Downloader
 gdown==5.2.0
 requests>=2.31.0
 
-# Core
+# Core ML
 torch==2.3.1
 transformers==4.41.2
 sentence-transformers==2.7.0
 tokenizers==0.19.1
 huggingface_hub==0.23.5
 safetensors==0.4.3
-tokenizers==0.19.1
 
 # SciPy stack
 scikit-learn==1.4.2
+imbalanced-learn==0.12.3
 joblib==1.3.2
 numpy==1.26.4
 scipy==1.11.4
-streamlit==1.38.0
-imbalanced-learn==0.12.3
 
-# Streamlit & utils
+# App
+streamlit==1.38.0
 pandas==2.2.2
-googletrans==4.0.0-rc1
 plotly==5.23.0
 yfinance==0.2.40
+googletrans==4.0.0-rc1
