@@ -18,10 +18,9 @@ st.set_page_config(
 # ==== ULTRA-EARLY HF TOKENIZER COMPAT (JANGAN HAPUS) ====
 # ==== ULTRA-EARLY COMPAT SHIM (JANGAN HAPUS) ====
 
-# ==== ULTRA-EARLY HF CONFIG COMPAT (PASTE DI PALING ATAS, SEBELUM LOAD MODEL) ====
+# ==== ULTRA-EARLY HF COMPAT (letakkan PALING ATAS, sebelum import SentenceTransformer / joblib) ====
 import sys, types
 
-# Default flags yang sering hilang pada artefak lama
 _HF_CFG_DEFAULTS = {
     "output_attentions": False,
     "output_hidden_states": False,
@@ -37,13 +36,12 @@ def _cfg_set_defaults(cfg):
         for k, v in _HF_CFG_DEFAULTS.items():
             if not hasattr(cfg, k):
                 setattr(cfg, k, v)
-        # beberapa artefak lama menyetel return_dict=None
         if getattr(cfg, "return_dict", None) is None:
             setattr(cfg, "return_dict", False)
     except Exception:
         pass
 
-# 1) Patch kelas BertConfig agar instance baru SELALU punya field di atas
+# Patch BertConfig agar instance punya field-field default di atas
 try:
     from transformers.models.bert.configuration_bert import BertConfig as _BertConfig
     _orig_init = _BertConfig.__init__
@@ -54,38 +52,47 @@ try:
 except Exception:
     pass
 
-# 2) Helper untuk “menyehatkan” SentenceTransformer yang sudah ter-load
-def _ensure_st_encoder_ok(st_model):
-    """
-    Tambah defaults di config model inti (AutoModel/bert) & amankan pad_token tokenizer.
-    Aman dipanggil berulang kali.
-    """
+# Shim modul lama: sentence_transformers.model_card (artefak .joblib lama suka refer ke sini)
+if "sentence_transformers.model_card" not in sys.modules:
+    _mc = types.ModuleType("sentence_transformers.model_card")
+    class _ModelCard: ...
+    class _SentenceTransformerModelCardData:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+    _mc.ModelCard = _ModelCard
+    _mc.SentenceTransformerModelCardData = _SentenceTransformerModelCardData
+    sys.modules["sentence_transformers.model_card"] = _mc
+
+# Tokenizer privat attr kompat
+try:
+    from transformers import PreTrainedTokenizerBase
+    if not hasattr(PreTrainedTokenizerBase, "_unk_token"): PreTrainedTokenizerBase._unk_token = None
+    if not hasattr(PreTrainedTokenizerBase, "_pad_token"): PreTrainedTokenizerBase._pad_token = None
+except Exception:
+    pass
+
+# Helpers supaya aman dipanggil kapan saja
+def _ENSURE_ST_ENCODER_OK(st_model):
     try:
-        # cari modul pertama (Transformer)
         first_mod = getattr(st_model, "_first_module")() if hasattr(st_model, "_first_module") else None
         core = None
         if first_mod is not None:
             core = getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None)
-        # kalau lewat atribut langsung
-        if core is None:
-            core = getattr(st_model, "auto_model", None) or getattr(st_model, "model", None)
+        core = core or getattr(st_model, "auto_model", None) or getattr(st_model, "model", None)
         if core is not None and hasattr(core, "config"):
             _cfg_set_defaults(core.config)
     except Exception:
         pass
 
-# 3) (Opsional tapi aman) – pastikan tokenizer punya pad_token agar encode tidak error di varian HF tertentu
-def _ensure_pad_token_for_st_model(st_model):
+def _ENSURE_PAD_TOKEN_FOR_ST_MODEL(st_model):
     try:
         tok = getattr(st_model, "tokenizer", None)
         if tok is None and hasattr(st_model, "_first_module"):
-            try:
-                tok = st_model._first_module().tokenizer
-            except Exception:
-                tok = None
-        if tok is None:
-            return
-        # set pad_token jika hilang
+            try: tok = st_model._first_module().tokenizer
+            except Exception: tok = None
+        if tok is None: return
+
         pad = getattr(tok, "pad_token", None)
         if pad in (None, "", "None"):
             if getattr(tok, "sep_token", None):
@@ -99,16 +106,14 @@ def _ensure_pad_token_for_st_model(st_model):
                     setattr(tok, "_pad_token", "[PAD]")
                     try: tok.pad_token = "[PAD]"
                     except Exception: pass
-        # pastikan pad_token_id integer
+
         if getattr(tok, "pad_token_id", None) is None:
-            try:
-                tok.pad_token = tok.pad_token  # trigger refresh id
-            except Exception:
-                pass
+            try: tok.pad_token = tok.pad_token
+            except Exception: pass
             if getattr(tok, "pad_token_id", None) is None:
                 try: setattr(tok, "pad_token_id", 0)
                 except Exception: pass
-        # resize embedding jika nambah special token
+
         try:
             vocab_len = len(tok)
             first_mod = st_model._first_module() if hasattr(st_model, "_first_module") else None
@@ -120,6 +125,8 @@ def _ensure_pad_token_for_st_model(st_model):
             pass
     except Exception:
         pass
+# ==== END ULTRA-EARLY ====
+
 
 # 4) Jadikan helper global agar bisa dipanggil setelah unpickle
 globals()["_CFG_SET_DEFAULTS"] = _cfg_set_defaults
