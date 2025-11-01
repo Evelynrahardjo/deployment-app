@@ -835,33 +835,33 @@ if pr_feature == "Sentiment":
     from sentence_transformers import SentenceTransformer
     
     class SBERTEncoder(BaseEstimator, TransformerMixin):
-    def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-                 batch_size=64, normalize_embeddings=True, device=None):
-        self.model_name = model_name
-        self.batch_size = batch_size
-        self.normalize_embeddings = normalize_embeddings
-        self.device = device
-
-        self._encoder = SentenceTransformer(self.model_name, device=self.device)
-        _ensure_pad_token_for_st_model(self._encoder)           # ✅ tokenizer aman
-        _ensure_transformer_config_defaults(self._encoder)      # ✅ INI YANG PENTING
-
-    def transform(self, X):
-        import pandas as pd
-        texts = pd.Series(X).astype(str).tolist()
-
-        # panggil lagi (idempotent) sebelum encode
-        _ensure_pad_token_for_st_model(self._encoder)
-        _ensure_transformer_config_defaults(self._encoder)      # ✅ PENTING
-
-        embs = self._encoder.encode(
-            texts,
-            batch_size=self.batch_size,
-            show_progress_bar=False,
-            convert_to_numpy=True,
-            normalize_embeddings=self.normalize_embeddings,
-        )
-        return embs
+        def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                     batch_size=64, normalize_embeddings=True, device=None):
+            self.model_name = model_name
+            self.batch_size = batch_size
+            self.normalize_embeddings = normalize_embeddings
+            self.device = device
+    
+            self._encoder = SentenceTransformer(self.model_name, device=self.device)
+            _ensure_pad_token_for_st_model(self._encoder)           # ✅ tokenizer aman
+            _ensure_transformer_config_defaults(self._encoder)      # ✅ INI YANG PENTING
+    
+        def transform(self, X):
+            import pandas as pd
+            texts = pd.Series(X).astype(str).tolist()
+    
+            # panggil lagi (idempotent) sebelum encode
+            _ensure_pad_token_for_st_model(self._encoder)
+            _ensure_transformer_config_defaults(self._encoder)      # ✅ PENTING
+    
+            embs = self._encoder.encode(
+                texts,
+                batch_size=self.batch_size,
+                show_progress_bar=False,
+                convert_to_numpy=True,
+                normalize_embeddings=self.normalize_embeddings,
+            )
+            return embs
 
     
     # ==== Daftarkan alias ke __main__ supaya unpickle tidak gagal ====
@@ -1856,33 +1856,33 @@ if pr_feature == "Sentiment + Technical":
     from sentence_transformers import SentenceTransformer
     
     class SBERTEncoder(BaseEstimator, TransformerMixin):
-    def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-                 batch_size=64, normalize_embeddings=True, device=None):
-        self.model_name = model_name
-        self.batch_size = batch_size
-        self.normalize_embeddings = normalize_embeddings
-        self.device = device
-
-        self._encoder = SentenceTransformer(self.model_name, device=self.device)
-        _ensure_pad_token_for_st_model(self._encoder)           # ✅ tokenizer aman
-        _ensure_transformer_config_defaults(self._encoder)      # ✅ INI YANG PENTING
-
-    def transform(self, X):
-        import pandas as pd
-        texts = pd.Series(X).astype(str).tolist()
-
-        # panggil lagi (idempotent) sebelum encode
-        _ensure_pad_token_for_st_model(self._encoder)
-        _ensure_transformer_config_defaults(self._encoder)      # ✅ PENTING
-
-        embs = self._encoder.encode(
-            texts,
-            batch_size=self.batch_size,
-            show_progress_bar=False,
-            convert_to_numpy=True,
-            normalize_embeddings=self.normalize_embeddings,
-        )
-        return embs
+        def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                     batch_size=64, normalize_embeddings=True, device=None):
+            self.model_name = model_name
+            self.batch_size = batch_size
+            self.normalize_embeddings = normalize_embeddings
+            self.device = device
+    
+            self._encoder = SentenceTransformer(self.model_name, device=self.device)
+            _ensure_pad_token_for_st_model(self._encoder)           # ✅ tokenizer aman
+            _ensure_transformer_config_defaults(self._encoder)      # ✅ INI YANG PENTING
+    
+        def transform(self, X):
+            import pandas as pd
+            texts = pd.Series(X).astype(str).tolist()
+    
+            # panggil lagi (idempotent) sebelum encode
+            _ensure_pad_token_for_st_model(self._encoder)
+            _ensure_transformer_config_defaults(self._encoder)      # ✅ PENTING
+    
+            embs = self._encoder.encode(
+                texts,
+                batch_size=self.batch_size,
+                show_progress_bar=False,
+                convert_to_numpy=True,
+                normalize_embeddings=self.normalize_embeddings,
+            )
+            return embs
 
 
 
