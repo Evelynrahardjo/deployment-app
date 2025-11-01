@@ -190,88 +190,70 @@ st.markdown("""
 <style>
 /* ====== Header ====== */
 header, [data-testid="stHeader"] {
-    background-color: #f6f0ff !important;
-    color: #000 !important;
-    border-bottom: 1px solid #e3d7ff;
+  background-color:#f6f0ff !important; color:#000 !important; border-bottom:1px solid #e3d7ff;
 }
 
-/* ====== Konten utama ====== */
-.stApp { background-color: #f6f0ff; color: #000000; }
+/* ====== Body & Sidebar ====== */
+.stApp{ background:#f6f0ff; color:#000 !important; }
+[data-testid="stSidebar"]{ background:#d9caff; color:#000; padding-top:.5rem; }
+[data-testid="stSidebar"] [role="radiogroup"]>div>div:first-child{ display:none !important; }
+[data-testid="stSidebar"] *{ color:#000 !important; font-weight:600; font-size:17px; }
 
-/* ====== Sidebar ====== */
-[data-testid="stSidebar"] {
-    background-color: #d9caff; color: #000; padding-top: 0.5rem;
-}
-[data-testid="stSidebar"] [role="radiogroup"] > div > div:first-child { display: none !important; }
-[data-testid="stSidebar"] * { color: #000 !important; font-weight: 600; font-size: 17px; }
-[data-testid="stSidebar"] label:hover { background-color: #e9e0ff !important; border-radius: 8px; transition: all 0.3s ease; }
+/* ====== Labels & Radio text ====== */
+label, .stRadio label p, .stDateInput label p, .stSelectbox label p{ color:#000 !important; font-weight:600 !important; }
+.stRadio div[role="radio"] p{ color:#000 !important; font-weight:600 !important; }
 
-/* ====== FORM LABELS ====== */
-label, .stRadio label p, .stDateInput label p, .stSelectbox label p { color: #000 !important; font-weight: 600 !important; }
+/* ====== Inputs (tetap teks putih di field gelap) ====== */
+.stDateInput input,
+.stSelectbox [data-baseweb="select"] input{ color:#fff !important; }
 
-/* ====== RADIO TEXT ====== */
-.stRadio div[role="radio"] p { color: #000 !important; font-weight: 600 !important; }
+/* ====== Headings & Links ====== */
+h1,h2,h3{ color:#5b21b6 !important; } a,a:visited,a:hover{ color:#111 !important; }
 
-/* ====== INPUT TEXT ====== */
-.stDateInput input, .stSelectbox div[data-baseweb="select"] input { color: white !important; }
+/* ====== Buttons ====== */
+.stButton>button{ color:#fff !important; background:#1f2937 !important; border:1px solid #bfa8ff !important; border-radius:10px !important; font-weight:700 !important; }
+.stButton>button:hover{ background:#374151 !important; }
+.stButton>button:focus:not(:active){ box-shadow:0 0 0 3px rgba(91,33,182,.25) !important; }
 
-/* Headings/links */
-h1, h2, h3 { color: #5b21b6; } 
-a, a:visited, a:hover { color: #111; }
-
-/* ====== Toggle sidebar ====== */
-button[aria-label="Toggle sidebar"], [data-testid="collapsedControl"], button[kind="header"]{
-    background-color: #f6f0ff !important; border: 1px solid #d3c4ff !important;
-    border-radius: 8px !important; box-shadow: 0 0 4px rgba(0,0,0,0.1) !important; opacity: 1 !important;
-}
-button[aria-label="Toggle sidebar"] svg path, [data-testid="collapsedControl"] svg path, button[kind="header"] svg path {
-    fill: #000000 !important; stroke: #000000 !important; opacity: 1 !important;
-}
-button[aria-label="Toggle sidebar"]:hover, [data-testid="collapsedControl"]:hover, button[kind="header"]:hover {
-    background-color: #e9e0ff !important; border-color: #bfa8ff !important; transform: scale(1.05);
-    transition: all 0.2s ease-in-out;
-}
-
-/* ===== Buttons ===== */
-.stButton > button{
-    color:#fff !important; background:#1f2937 !important; border:1px solid #bfa8ff !important; 
-    border-radius:10px !important; font-weight:700 !important;
-}
-.stButton > button:hover{ background:#374151 !important; }
-.stButton > button:focus:not(:active){ box-shadow:0 0 0 3px rgba(91,33,182,.25) !important; }
-
-/* ===== TextArea ===== */
-.stTextArea textarea{ color:#ffffff !important; }
+/* ====== TextArea ====== */
+.stTextArea textarea{ color:#fff !important; }
 .stTextArea textarea::placeholder{ color:#e5e7eb !important; opacity:1 !important; }
 
-/* ===== Alerts (success/info/warning/error) — DARK with WHITE text ===== */
-.stAlert{
-    background:#111827 !important;             /* dark slate */
-    color:#ffffff !important;                   /* ✅ putih */
-    border:1px solid #bfa8ff !important;        /* ungu muda */
-    border-radius:12px !important;
-    font-weight:600 !important;
-}
-.stAlert *{ color:#ffffff !important; }         /* pastikan semua konten putih */
-.stAlert a{ text-decoration: underline; }
-.stAlert [data-testid="stIcon"] svg{ fill:#bfa8ff !important; }  /* ikon ungu */
+/* ====== ALERT/INFO/SUCCESS/ERROR text jadi hitam ====== */
+[data-testid="stNotification"], .stAlert, .stAlert *{ color:#000 !important; }
 
-/* Caption kecil agar tidak balik ke hitam */
-[data-testid="stCaptionContainer"] *{ color:#e5e7eb !important; }
+/* ====== >>> INI YANG NGEBENERIN TEKS PUTIH <<< ====== */
+/* Semua konten markdown & caption jadi hitam */
+[data-testid="stMarkdownContainer"], 
+[data-testid="stMarkdownContainer"] *{ color:#000 !important; }
 
-/* Code/label kecil di dalam alert */
-.stAlert code, .stAlert kbd{
-    background: rgba(191,168,255,.15) !important;
-    color:#fff !important; 
-    border-radius:6px !important; 
-    padding:0 .25rem !important;
-}
+/* Expander (judul & isi) */
+[data-testid="stExpander"], 
+[data-testid="stExpander"] *{ color:#000 !important; }
 
-.block-container { padding-top: 1.2rem; }
+/* Caption (st.caption) */
+[data-testid="stCaptionContainer"], 
+[data-testid="stCaptionContainer"] *{ color:#000 !important; }
+
+/* Status teks kecil lain (help, hint) */
+[data-testid="stHelp"], 
+[data-testid="stHelp"] *{ color:#000 !important; }
+
+/* Metric/Badge kecil */
+[data-testid="stMetricValue"], 
+[data-testid="stMetricDelta"], 
+[data-testid="stMetricLabel"],
+[data-testid="stMetricValue"] *, 
+[data-testid="stMetricDelta"] *, 
+[data-testid="stMetricLabel"] *{ color:#000 !important; }
+
+/* Plotly modebar tooltips dll */
+.js-plotly-plot, .js-plotly-plot *{ color:#000 !important; }
+
+/* ====== Misc ====== */
+.block-container{ padding-top:1.2rem; }
 </style>
 """, unsafe_allow_html=True)
-
-
 
 
 # =========================================
