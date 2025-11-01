@@ -694,6 +694,75 @@ if pr_feature == "Sentiment":
             _ensure_tokenizer_tokens(tok)
 
     
+    # ==== PAD-TOKEN SAFETY untuk tokenizer HF/SBERT ====
+    def _ensure_pad_token_for_st_model(st_model):
+        """
+        Pastikan tokenizer di SentenceTransformer memiliki pad_token & pad_token_id (int >= 0).
+        Jika belum ada, tambahkan, dan resize embeddings jika perlu.
+        Aman dipanggil berulang kali.
+        """
+        try:
+            tok = getattr(st_model, "tokenizer", None)
+            if tok is None:
+                try:
+                    tok = st_model._first_module().tokenizer
+                except Exception:
+                    tok = None
+            if tok is None:
+                return  # tidak ada tokenizer, abaikan
+    
+            # 1) pastikan ada pad_token (string)
+            pad_tok = getattr(tok, "pad_token", None)
+            if pad_tok in (None, "", "None"):
+                # gunakan sep_token/eos_token jika ada; kalau tidak, tambahkan '[PAD]'
+                if getattr(tok, "sep_token", None):
+                    tok.pad_token = tok.sep_token
+                elif getattr(tok, "eos_token", None):
+                    tok.pad_token = tok.eos_token
+                else:
+                    try:
+                        tok.add_special_tokens({"pad_token": "[PAD]"})
+                    except Exception:
+                        # fallback terakhir: set atribut privat supaya tidak None
+                        setattr(tok, "_pad_token", "[PAD]")
+                        try:
+                            tok.pad_token = "[PAD]"
+                        except Exception:
+                            pass
+    
+            # 2) pastikan pad_token_id integer
+            pad_id = getattr(tok, "pad_token_id", None)
+            if pad_id is None:
+                # mencoba men-triger update id dengan set ulang pad_token
+                try:
+                    tok.pad_token = tok.pad_token
+                except Exception:
+                    pass
+                pad_id = getattr(tok, "pad_token_id", None)
+    
+            if pad_id is None:
+                # kalau masih None, paksa ke 0 agar tidak NoneType dibandingkan int
+                try:
+                    setattr(tok, "pad_token_id", 0)
+                    pad_id = 0
+                except Exception:
+                    pass
+    
+            # 3) jika kita menambah special token, mungkin perlu resize embedding
+            try:
+                vocab_len = len(tok)
+                first_mod = st_model._first_module()
+                maybe_model = getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None)
+                if maybe_model is not None and hasattr(maybe_model, "resize_token_embeddings"):
+                    maybe_model.resize_token_embeddings(vocab_len)
+            except Exception:
+                pass
+    
+        except Exception:
+            # jangan biarkan compat ini meledak
+            pass
+
+    
     class SBERTEncoder(BaseEstimator, TransformerMixin):
         """
         NOTE: KELAS INI HARUS TOP-LEVEL dan terdefinisi sblm joblib.load.
