@@ -585,12 +585,49 @@ if pr_feature == "Sentiment":
     except Exception as e:
         SentenceTransformer = None  # biar app tetap jalan kalau lib belum ada
 
+    # --- tambahkan di dekat import SBERTEncoder kamu ---
+    def _ensure_pad_token_for_st_model(st_model):
+        """
+        Pastikan tokenizer punya pad_token & atribut privat yang dibutuhkan
+        oleh transformers baru. Jika belum ada, tambahkan '[PAD]' dan resize
+        embedding agar indexnya valid.
+        """
+        # Ambil tokenizer dari SentenceTransformer
+        tok = getattr(st_model, "tokenizer", None)
+        if tok is None and hasattr(st_model, "_first_module"):
+            try:
+                tok = st_model._first_module().tokenizer
+            except Exception:
+                pass
+        if tok is None:
+            return  # tidak bisa apa-apa, tapi sangat jarang terjadi
+    
+        # Beberapa versi lama tidak punya atribut privat ini:
+        if not hasattr(tok, "_pad_token"):
+            tok._pad_token = None  # buat placeholder agar property pad_token tidak error
+    
+        # Kalau belum ada pad token → set atau tambahkan
+        if getattr(tok, "pad_token", None) is None:
+            candidate = getattr(tok, "eos_token", None) or getattr(tok, "sep_token", None)
+            if candidate:
+                tok.pad_token = candidate
+            else:
+                # Tambah token baru [PAD] dan resize embedding
+                tok.add_special_tokens({"pad_token": "[PAD]"})
+                try:
+                    # Untuk model AutoModel di SentenceTransformer
+                    st_model.auto_model.resize_token_embeddings(len(tok))
+                except Exception:
+                    # Lewatkan jika tidak tersedia; kebanyakan model ST punya auto_model
+                    pass
+    
+        # Pastikan id valid
+        if getattr(tok, "pad_token_id", None) in (None, -1):
+            tok.pad_token = tok.pad_token or "[PAD]"
+
     class SBERTEncoder(BaseEstimator, TransformerMixin):
-        def __init__(self,
-                     model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-                     batch_size=64,
-                     normalize_embeddings=True,
-                     device=None):
+        def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                     batch_size=64, normalize_embeddings=True, device=None):
             if SentenceTransformer is None:
                 raise ImportError("Missing sentence-transformers. Install dulu: pip install -q sentence-transformers")
             self.model_name = model_name
@@ -598,6 +635,10 @@ if pr_feature == "Sentiment":
             self.normalize_embeddings = normalize_embeddings
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
+    
+            # ✅ FIX tokenizer pad-token untuk kompatibilitas versi
+            _ensure_pad_token_for_st_model(self._encoder)
+
 
         def fit(self, X, y=None): return self
         def transform(self, X):
@@ -1523,18 +1564,19 @@ elif pr_feature == "Sentiment + Technical":
         SentenceTransformer = None
 
     class SBERTEncoder(BaseEstimator, TransformerMixin):
-        def __init__(self,
-                     model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-                     batch_size=64,
-                     normalize_embeddings=True,
-                     device=None):
+        def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                     batch_size=64, normalize_embeddings=True, device=None):
             if SentenceTransformer is None:
-                raise ImportError("Missing sentence-transformers. Install: pip install -q sentence-transformers")
+                raise ImportError("Missing sentence-transformers. Install dulu: pip install -q sentence-transformers")
             self.model_name = model_name
             self.batch_size = batch_size
             self.normalize_embeddings = normalize_embeddings
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
+    
+            # ✅ FIX tokenizer pad-token untuk kompatibilitas versi
+            _ensure_pad_token_for_st_model(self._encoder)
+
 
         def fit(self, X, y=None): return self
         def transform(self, X):
@@ -2216,7 +2258,23 @@ def get_pipeline_local_path() -> str:
 # =========================================
 # CONFIG & THEME
 # =========================================
-st.set_page_config(page_title="INDONESIA BANKING STOCK PRICE PREDICTION", page_icon="📈", layout="wide")
+# ==== IMPORTS (python stdlib & libs) ====
+import os, re, hashlib, tempfile
+from pathlib import Path
+from datetime import datetime, timedelta
+
+import streamlit as st
+# ... imports lain ...
+
+# ✅ HANYA SEKALI dan PALING AWAL
+st.set_page_config(
+    page_title="INDONESIA BANKING STOCK PRICE PREDICTION",
+    page_icon="📈",
+    layout="wide"
+)
+
+# lanjutkan CSS theme, sidebar, dll...
+
 
 st.markdown("""
 <style>
