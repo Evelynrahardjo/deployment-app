@@ -1,4 +1,19 @@
+# ===== Imports paling atas =====
+import os
+from pathlib import Path
+import streamlit as st
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+# ... imports lain yang TIDAK memanggil st.* saat import
 
+# ===== Satu-satunya pemanggilan set_page_config di file ini =====
+st.set_page_config(
+    page_title="INDONESIA BANKING STOCK PRICE PREDICTION",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 # ==== Ultra-early COMPAT SHIM untuk artefak .joblib lama (JANGAN HAPUS) ====
 # ==== ULTRA-EARLY HF TOKENIZER COMPAT (JANGAN HAPUS) ====
 import types, sys
@@ -48,11 +63,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # ==== WAJIB: jadikan perintah Streamlit pertama ====
 
-st.set_page_config(
-    page_title="INDONESIA BANKING STOCK PRICE PREDICTION",
-    page_icon="📈",
-    layout="wide"
-)
+
 
 
 # ==== PATH HELPERS ====
