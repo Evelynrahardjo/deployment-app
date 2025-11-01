@@ -1,3 +1,9 @@
+st.set_page_config(
+    page_title="INDONESIA BANKING STOCK PRICE PREDICTION",
+    page_icon="📈",
+    layout="wide"
+)
+
 # ==== Ultra-early COMPAT SHIM untuk artefak .joblib lama (JANGAN HAPUS) ====
 # ==== ULTRA-EARLY HF TOKENIZER COMPAT (JANGAN HAPUS) ====
 import types, sys
@@ -46,11 +52,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # ==== WAJIB: jadikan perintah Streamlit pertama ====
-st.set_page_config(
-    page_title="INDONESIA BANKING STOCK PRICE PREDICTION",
-    page_icon="📈",
-    layout="wide"
-)
+
 
 # ==== PATH HELPERS ====
 APP_DIR = Path(__file__).parent.resolve()
