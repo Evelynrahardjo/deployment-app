@@ -2332,12 +2332,6 @@ import streamlit as st
 # ... imports lain ...
 
 # ✅ HANYA SEKALI dan PALING AWAL
-st.set_page_config(
-    page_title="INDONESIA BANKING STOCK PRICE PREDICTION",
-    page_icon="📈",
-    layout="wide"
-)
-
 # lanjutkan CSS theme, sidebar, dll...
 
 
