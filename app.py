@@ -600,6 +600,12 @@ if pr_feature == "Sentiment":
     except Exception as e:
         SentenceTransformer = None  # biar app tetap jalan kalau lib belum ada
 
+    from sklearn.base import BaseEstimator, TransformerMixin
+    try:
+        from sentence_transformers import SentenceTransformer
+    except Exception:
+        SentenceTransformer = None
+    
     class SBERTEncoder(BaseEstimator, TransformerMixin):
         def __init__(self,
                      model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
@@ -613,15 +619,38 @@ if pr_feature == "Sentiment":
             self.normalize_embeddings = normalize_embeddings
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
-
-        def fit(self, X, y=None): return self
+    
+            # === FIX: pastikan tokenizer punya pad_token ===
+            try:
+                tok = self._encoder.tokenizer
+                if getattr(tok, "pad_token", None) is None:
+                    if getattr(tok, "eos_token", None):
+                        tok.pad_token = tok.eos_token
+                    elif getattr(tok, "sep_token", None):
+                        tok.pad_token = tok.sep_token
+                    else:
+                        tok.add_special_tokens({"pad_token": "[PAD]"})
+                        first = self._encoder._first_module()  # sentence_transformers.models.Transformer
+                        if hasattr(first, "auto_model"):
+                            first.auto_model.resize_token_embeddings(len(tok))
+            except Exception:
+                # Jangan matikan app kalau patch gagal; biar ketangkap saat transform()
+                pass
+    
+        def fit(self, X, y=None):
+            return self
+    
         def transform(self, X):
             texts = pd.Series(X).astype(str).tolist()
             embs = self._encoder.encode(
-                texts, batch_size=self.batch_size, show_progress_bar=False,
-                convert_to_numpy=True, normalize_embeddings=self.normalize_embeddings,
+                texts,
+                batch_size=self.batch_size,
+                show_progress_bar=False,
+                convert_to_numpy=True,
+                normalize_embeddings=self.normalize_embeddings,
             )
             return embs
+
 
     @st.cache_resource(show_spinner=False)
     def _get_translator():
@@ -1537,6 +1566,12 @@ elif pr_feature == "Sentiment + Technical":
     except Exception:
         SentenceTransformer = None
 
+    from sklearn.base import BaseEstimator, TransformerMixin
+    try:
+        from sentence_transformers import SentenceTransformer
+    except Exception:
+        SentenceTransformer = None
+    
     class SBERTEncoder(BaseEstimator, TransformerMixin):
         def __init__(self,
                      model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
@@ -1544,21 +1579,44 @@ elif pr_feature == "Sentiment + Technical":
                      normalize_embeddings=True,
                      device=None):
             if SentenceTransformer is None:
-                raise ImportError("Missing sentence-transformers. Install: pip install -q sentence-transformers")
+                raise ImportError("Missing sentence-transformers. Install dulu: pip install -q sentence-transformers")
             self.model_name = model_name
             self.batch_size = batch_size
             self.normalize_embeddings = normalize_embeddings
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
-
-        def fit(self, X, y=None): return self
+    
+            # === FIX: pastikan tokenizer punya pad_token ===
+            try:
+                tok = self._encoder.tokenizer
+                if getattr(tok, "pad_token", None) is None:
+                    if getattr(tok, "eos_token", None):
+                        tok.pad_token = tok.eos_token
+                    elif getattr(tok, "sep_token", None):
+                        tok.pad_token = tok.sep_token
+                    else:
+                        tok.add_special_tokens({"pad_token": "[PAD]"})
+                        first = self._encoder._first_module()  # sentence_transformers.models.Transformer
+                        if hasattr(first, "auto_model"):
+                            first.auto_model.resize_token_embeddings(len(tok))
+            except Exception:
+                # Jangan matikan app kalau patch gagal; biar ketangkap saat transform()
+                pass
+    
+        def fit(self, X, y=None):
+            return self
+    
         def transform(self, X):
             texts = pd.Series(X).astype(str).tolist()
             embs = self._encoder.encode(
-                texts, batch_size=self.batch_size, show_progress_bar=False,
-                convert_to_numpy=True, normalize_embeddings=self.normalize_embeddings,
+                texts,
+                batch_size=self.batch_size,
+                show_progress_bar=False,
+                convert_to_numpy=True,
+                normalize_embeddings=self.normalize_embeddings,
             )
             return embs
+
 
     @st.cache_resource(show_spinner=False)
     def _get_translator():
