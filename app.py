@@ -7,7 +7,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import sys, types, importlib
 
 # Plotly
 import plotly.express as px
@@ -29,64 +28,11 @@ from datetime import datetime, timedelta
 from pathlib import Path  # ✅ tambahan ini
 
 # ==== PATH HELPERS ====
-# ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
-# ==== PATH HELPERS ====
-from pathlib import Path  # <- pastikan ini ada
-
-# ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
-import sys, types, importlib
-
-# 1) Shim untuk artefak lama sentence_transformers yang refer ke 'sentence_transformers.model_card'
-# ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
-# Harus ada SEBELUM pemanggilan joblib.load() apapun.
-import sys, types
-
-# 1) Lengkapi semua kelas yang mungkin dicari pickle di 'sentence_transformers.model_card'
-try:
-    import importlib, importlib.util
-    _mod_name = "sentence_transformers.model_card"
-    spec = importlib.util.find_spec(_mod_name)
-    _mod = importlib.import_module(_mod_name) if spec is not None else types.ModuleType(_mod_name)
-
-    # Beberapa artefak pickle (lintas versi) memanggil nama-nama ini:
-    _needed = (
-        "SentenceTransformerModelCard",
-        "ModelCard",
-        "SentenceTransformerModelCardData",
-        "SentenceTransformerModelCardMeta",
-    )
-
-    class _DummyModelCard:
-        def __init__(self, *args, **kwargs): pass
-        def __getstate__(self): return {}
-        def __setstate__(self, state): pass
-
-    for _name in _needed:
-        if not hasattr(_mod, _name):
-            setattr(_mod, _name, _DummyModelCard)
-
-    # Pastikan module entry di sys.modules menunjuk ke objek dengan kelas dummy di atas
-    sys.modules[_mod_name] = _mod
-except Exception:
-    # Jangan mematikan app kalau patch ini gagal
-    pass
-
-# 2) Kompatibilitas tokenizer lama (beberapa artefak akses atribut private yang tak ada di versi baru)
-try:
-    from transformers import PreTrainedTokenizerBase
-    for _attr in ("_pad_token", "_sep_token", "_cls_token", "_mask_token", "_unk_token"):
-        if not hasattr(PreTrainedTokenizerBase, _attr):
-            setattr(PreTrainedTokenizerBase, _attr, None)
-except Exception:
-    pass
-
-
 APP_DIR = Path(__file__).parent.resolve()
 
 def repo_path(*parts: str) -> str:
     """Build absolute path safely for Streamlit Cloud or local."""
     return str(APP_DIR.joinpath(*parts))
-
 
 # =========================================
 # CONFIG & THEME
@@ -593,54 +539,13 @@ if pr_feature == "Sentiment":
 
     PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
 
-    # --- Helper WAJIB (baru): pastikan pad_token & pad_token_id sinkron ---
-    def _force_pad_token_for_sbert(encoder):
-        """
-        Pastikan tokenizer & model di SentenceTransformer 'encoder'
-        punya pad_token & pad_token_id. Kalau perlu, tambahkan [PAD]
-        dan resize embedding; juga sinkronkan ke config/generation_config.
-        """
-        try:
-            tok = encoder.tokenizer
-            first = encoder._first_module()           # sentence_transformers.models.Transformer
-            auto_model = getattr(first, "auto_model", None)
-            cfg = getattr(auto_model, "config", None)
-    
-            # 1) pastikan pad_token ada
-            if getattr(tok, "pad_token", None) is None:
-                if getattr(tok, "eos_token", None):
-                    tok.pad_token = tok.eos_token
-                elif getattr(tok, "sep_token", None):
-                    tok.pad_token = tok.sep_token
-                else:
-                    tok.add_special_tokens({"pad_token": "[PAD]"})
-                    if auto_model is not None:
-                        auto_model.resize_token_embeddings(len(tok))
-    
-            # 2) pastikan pad_token_id ada
-            if getattr(tok, "pad_token_id", None) is None:
-                tok.pad_token_id = tok.convert_tokens_to_ids(tok.pad_token)
-    
-            # 3) sinkron ke config model
-            if cfg is not None and getattr(cfg, "pad_token_id", None) is None:
-                cfg.pad_token_id = tok.pad_token_id
-    
-            # 4) sinkron ke generation_config (kalau ada)
-            gen_cfg = getattr(auto_model, "generation_config", None)
-            if gen_cfg is not None and getattr(gen_cfg, "pad_token_id", None) is None:
-                gen_cfg.pad_token_id = tok.pad_token_id
-    
-        except Exception:
-            # jangan matikan app; kalau gagal masih ketangkap di _ensure_pad_runtime()
-            pass
 
-    # --- SBERTEncoder (baru) ---
     from sklearn.base import BaseEstimator, TransformerMixin
     try:
         from sentence_transformers import SentenceTransformer
-    except Exception:
-        SentenceTransformer = None
-    
+    except Exception as e:
+        SentenceTransformer = None  # biar app tetap jalan kalau lib belum ada
+
     class SBERTEncoder(BaseEstimator, TransformerMixin):
         def __init__(self,
                      model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
@@ -654,29 +559,13 @@ if pr_feature == "Sentiment":
             self.normalize_embeddings = normalize_embeddings
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
-    
-            # ⛑️ patch awal
-            _force_pad_token_for_sbert(self._encoder)
-    
-        def fit(self, X, y=None):
-            return self
-    
-        def _ensure_pad_runtime(self):
-            # dipanggil setiap sebelum encode (double safety)
-            _force_pad_token_for_sbert(self._encoder)
-            tok = self._encoder.tokenizer
-            if getattr(tok, "pad_token", None) is None or getattr(tok, "pad_token_id", None) is None:
-                raise RuntimeError("Tokenizer masih belum punya pad_token/pad_token_id setelah patch.")
-    
+
+        def fit(self, X, y=None): return self
         def transform(self, X):
-            self._ensure_pad_runtime()
             texts = pd.Series(X).astype(str).tolist()
             embs = self._encoder.encode(
-                texts,
-                batch_size=self.batch_size,
-                show_progress_bar=False,
-                convert_to_numpy=True,
-                normalize_embeddings=self.normalize_embeddings,
+                texts, batch_size=self.batch_size, show_progress_bar=False,
+                convert_to_numpy=True, normalize_embeddings=self.normalize_embeddings,
             )
             return embs
 
@@ -697,7 +586,6 @@ if pr_feature == "Sentiment":
         except Exception:
             return text
 
-    
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
         import joblib
@@ -1587,55 +1475,13 @@ elif pr_feature == "Sentiment + Technical":
     # PATH_PIPELINE = "/content/sentiment_pipeline_sbert_linsvc.joblib"
     PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
 
-    # --- Helper WAJIB (baru): pastikan pad_token & pad_token_id sinkron ---
-    def _force_pad_token_for_sbert(encoder):
-        """
-        Pastikan tokenizer & model di SentenceTransformer 'encoder'
-        punya pad_token & pad_token_id. Kalau perlu, tambahkan [PAD]
-        dan resize embedding; juga sinkronkan ke config/generation_config.
-        """
-        try:
-            tok = encoder.tokenizer
-            first = encoder._first_module()           # sentence_transformers.models.Transformer
-            auto_model = getattr(first, "auto_model", None)
-            cfg = getattr(auto_model, "config", None)
-    
-            # 1) pastikan pad_token ada
-            if getattr(tok, "pad_token", None) is None:
-                if getattr(tok, "eos_token", None):
-                    tok.pad_token = tok.eos_token
-                elif getattr(tok, "sep_token", None):
-                    tok.pad_token = tok.sep_token
-                else:
-                    tok.add_special_tokens({"pad_token": "[PAD]"})
-                    if auto_model is not None:
-                        auto_model.resize_token_embeddings(len(tok))
-    
-            # 2) pastikan pad_token_id ada
-            if getattr(tok, "pad_token_id", None) is None:
-                tok.pad_token_id = tok.convert_tokens_to_ids(tok.pad_token)
-    
-            # 3) sinkron ke config model
-            if cfg is not None and getattr(cfg, "pad_token_id", None) is None:
-                cfg.pad_token_id = tok.pad_token_id
-    
-            # 4) sinkron ke generation_config (kalau ada)
-            gen_cfg = getattr(auto_model, "generation_config", None)
-            if gen_cfg is not None and getattr(gen_cfg, "pad_token_id", None) is None:
-                gen_cfg.pad_token_id = tok.pad_token_id
-    
-        except Exception:
-            # jangan matikan app; kalau gagal masih ketangkap di _ensure_pad_runtime()
-            pass
-
-
-        # --- SBERTEncoder (baru) ---
+    # SBERT encoder (agar pipeline joblib yang berisi SBERTEncoder bisa dikenali)
     from sklearn.base import BaseEstimator, TransformerMixin
     try:
         from sentence_transformers import SentenceTransformer
     except Exception:
         SentenceTransformer = None
-    
+
     class SBERTEncoder(BaseEstimator, TransformerMixin):
         def __init__(self,
                      model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
@@ -1643,38 +1489,21 @@ elif pr_feature == "Sentiment + Technical":
                      normalize_embeddings=True,
                      device=None):
             if SentenceTransformer is None:
-                raise ImportError("Missing sentence-transformers. Install dulu: pip install -q sentence-transformers")
+                raise ImportError("Missing sentence-transformers. Install: pip install -q sentence-transformers")
             self.model_name = model_name
             self.batch_size = batch_size
             self.normalize_embeddings = normalize_embeddings
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
-    
-            # ⛑️ patch awal
-            _force_pad_token_for_sbert(self._encoder)
-    
-        def fit(self, X, y=None):
-            return self
-    
-        def _ensure_pad_runtime(self):
-            # dipanggil setiap sebelum encode (double safety)
-            _force_pad_token_for_sbert(self._encoder)
-            tok = self._encoder.tokenizer
-            if getattr(tok, "pad_token", None) is None or getattr(tok, "pad_token_id", None) is None:
-                raise RuntimeError("Tokenizer masih belum punya pad_token/pad_token_id setelah patch.")
-    
+
+        def fit(self, X, y=None): return self
         def transform(self, X):
-            self._ensure_pad_runtime()
             texts = pd.Series(X).astype(str).tolist()
             embs = self._encoder.encode(
-                texts,
-                batch_size=self.batch_size,
-                show_progress_bar=False,
-                convert_to_numpy=True,
-                normalize_embeddings=self.normalize_embeddings,
+                texts, batch_size=self.batch_size, show_progress_bar=False,
+                convert_to_numpy=True, normalize_embeddings=self.normalize_embeddings,
             )
             return embs
-
 
     @st.cache_resource(show_spinner=False)
     def _get_translator():
