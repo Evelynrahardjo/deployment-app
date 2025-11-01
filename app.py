@@ -1,3 +1,4 @@
+%%writefile app.py
 # =========================================
 # IMPORTS
 # =========================================
@@ -32,95 +33,6 @@ APP_DIR = Path(__file__).parent.resolve()
 def repo_path(*parts: str) -> str:
     """Build absolute path safely for Streamlit Cloud or local."""
     return str(APP_DIR.joinpath(*parts))
-
-# ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
-import sys, types, importlib
-
-# 1) Shim untuk artefak lama sentence_transformers yang refer ke 'sentence_transformers.model_card'
-try:
-    import sentence_transformers  # pastikan paket ada
-    mc = sys.modules.get('sentence_transformers.model_card')
-    if mc is None:
-        mc = types.ModuleType('sentence_transformers.model_card')
-
-    class _Flex:
-        def __init__(self, *args, **kwargs):
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-        def __getattr__(self, name):
-            return None  # serap atribut yang tidak ada biar unpickle aman
-
-    # Nama-nama yang kadang ada di artefak lama
-    setattr(mc, 'ModelCard', _Flex)
-    setattr(mc, 'SentenceTransformerModelCardData', _Flex)
-    setattr(mc, 'CardData', _Flex)
-    setattr(mc, 'Card', _Flex)
-    sys.modules['sentence_transformers.model_card'] = mc
-except Exception as e:
-    print("Compat shim (model_card) failed:", e)
-
-# 2) Alias kelas 'BertSdpa*' → ke kelas BERT standar yang ada di versi transformers sekarang
-try:
-    mb = importlib.import_module("transformers.models.bert.modeling_bert")
-    if not hasattr(mb, "BertSdpaSelfAttention") and hasattr(mb, "BertSelfAttention"):
-        class BertSdpaSelfAttention(mb.BertSelfAttention): ...
-        mb.BertSdpaSelfAttention = BertSdpaSelfAttention
-    if not hasattr(mb, "BertSdpaSelfOutput") and hasattr(mb, "BertSelfOutput"):
-        class BertSdpaSelfOutput(mb.BertSelfOutput): ...
-        mb.BertSdpaSelfOutput = BertSdpaSelfOutput
-    if not hasattr(mb, "BertSdpaAttention") and hasattr(mb, "BertAttention"):
-        class BertSdpaAttention(mb.BertAttention): ...
-        mb.BertSdpaAttention = BertSdpaAttention
-except Exception as e:
-    print("Compat shim (BERT SDPA) failed:", e)
-
-# --- SBERT tokenizer pad-token safety patch ---
-# --- SBERT tokenizer pad-token safety patch (REPLACE your version with this) ---
-def _ensure_pad_token_for_sbert(sbert_model):
-    """
-    Pastikan tokenizer SBERT punya pad_token (via setter resmi),
-    dan resize embedding model jika penambahan token terjadi.
-    Aman untuk tokenizer 'fast'.
-    """
-    try:
-        mod = sbert_model._first_module()  # sentence_transformers.models.Transformer
-        tok = mod.tokenizer
-
-        # 1) Jika akses pad_token melempar AttributeError, kita paksa set via add_special_tokens
-        needs_set = False
-        try:
-            _ = tok.pad_token  # bisa raise AttributeError di beberapa versi
-            needs_set = (tok.pad_token is None)
-        except AttributeError:
-            needs_set = True
-
-        if needs_set:
-            # pilih kandidat pad token yang aman
-            cand = None
-            # coba dari special tokens map dulu
-            try:
-                stm = getattr(tok, "special_tokens_map", {}) or {}
-                cand = stm.get("pad_token", None) or stm.get("sep_token", None)
-            except Exception:
-                cand = None
-            if not cand:
-                # fallback
-                cand = getattr(tok, "sep_token", None) or getattr(tok, "eos_token", None) \
-                       or getattr(tok, "cls_token", None) or "[PAD]"
-
-            # set pad token via API resmi (akan set pad_token_id juga)
-            tok.add_special_tokens({"pad_token": cand})
-
-            # resize embedding agar ukuran vocab sinkron
-            try:
-                mod.auto_model.resize_token_embeddings(len(tok))
-            except Exception:
-                pass
-
-    except Exception as e:
-        print("Pad-token patch failed:", e)
-
-
 
 # =========================================
 # CONFIG & THEME
@@ -647,26 +559,15 @@ if pr_feature == "Sentiment":
             self.normalize_embeddings = normalize_embeddings
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
-            _ensure_pad_token_for_sbert(self._encoder)  # <<< tambahkan ini
-
 
         def fit(self, X, y=None): return self
-
         def transform(self, X):
-        texts = pd.Series(X).astype(str).tolist()
-        embs = self._encoder.encode(
-            texts,
-            batch_size=self.batch_size,
-            show_progress_bar=False,
-            convert_to_numpy=True,
-            normalize_embeddings=self.normalize_embeddings,
-            padding=False,      # <- tambah
-            truncation=True,    # <- tambah
-            max_length=512      # opsional
-        )
-        return embs
-
-
+            texts = pd.Series(X).astype(str).tolist()
+            embs = self._encoder.encode(
+                texts, batch_size=self.batch_size, show_progress_bar=False,
+                convert_to_numpy=True, normalize_embeddings=self.normalize_embeddings,
+            )
+            return embs
 
     @st.cache_resource(show_spinner=False)
     def _get_translator():
@@ -684,90 +585,17 @@ if pr_feature == "Sentiment":
             return tr.translate(text, dest="en").text
         except Exception:
             return text
-    # --- Guard untuk artefak joblib lama yang merefer ke submodul ST ---
-    # ---- Compat shim untuk artefak lama yang menyimpan referensi 'sentence_transformers.model_card' ----
-    import sys, types
-    try:
-        import sentence_transformers  # pastikan package sudah ada
-        if 'sentence_transformers.model_card' not in sys.modules:
-            mc = types.ModuleType('sentence_transformers.model_card')
-    
-            class ModelCard:
-                def __init__(self, *args, **kwargs):
-                    for k, v in kwargs.items():
-                        setattr(self, k, v)
-    
-            mc.ModelCard = ModelCard
-            sys.modules['sentence_transformers.model_card'] = mc
-    except Exception as e:
-        print("Compat shim failed:", e)
-
-    # ==== Compat shim untuk artefak lama sentence-transformers (model_card) ====
-    # ==== Compat shim untuk artefak lama sentence-transformers (model_card) ====
-    import sys, types
-    
-    try:
-        import sentence_transformers  # pastikan paket ada
-    
-        # Selalu ambil/buat module 'sentence_transformers.model_card'
-        mc = sys.modules.get('sentence_transformers.model_card')
-        if mc is None:
-            mc = types.ModuleType('sentence_transformers.model_card')
-    
-        # Kelas fleksibel yang aman untuk unpickle (menyerap kwargs apa pun)
-        class _Flex:
-            def __init__(self, *args, **kwargs):
-                for k, v in kwargs.items():
-                    setattr(self, k, v)
-            def __getattr__(self, name):
-                # kalau ada akses atribut yang tidak ada, kembalikan None (aman)
-                return None
-    
-        # Pastikan nama-nama yang sering muncul di artefak lama tersedia
-        setattr(mc, 'ModelCard', _Flex)
-        setattr(mc, 'SentenceTransformerModelCardData', _Flex)
-        # opsional alias lain yang kadang ikut tersimpan
-        setattr(mc, 'CardData', _Flex)
-        setattr(mc, 'Card', _Flex)
-    
-        # Daftarkan / timpa di sys.modules supaya dipakai pickle
-        sys.modules['sentence_transformers.model_card'] = mc
-    
-    except Exception as e:
-        print("Compat shim (model_card) failed:", e)
-
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        import os, joblib, importlib
-    
-        # ---- JIT alias untuk kelas BERT SDPA (wajib sebelum joblib.load) ----
-        try:
-            mb = importlib.import_module("transformers.models.bert.modeling_bert")
-    
-            if not hasattr(mb, "BertSdpaSelfAttention") and hasattr(mb, "BertSelfAttention"):
-                class BertSdpaSelfAttention(mb.BertSelfAttention): ...
-                mb.BertSdpaSelfAttention = BertSdpaSelfAttention
-    
-            if not hasattr(mb, "BertSdpaSelfOutput") and hasattr(mb, "BertSelfOutput"):
-                class BertSdpaSelfOutput(mb.BertSelfOutput): ...
-                mb.BertSdpaSelfOutput = BertSdpaSelfOutput
-    
-            if not hasattr(mb, "BertSdpaAttention") and hasattr(mb, "BertAttention"):
-                class BertSdpaAttention(mb.BertAttention): ...
-                mb.BertSdpaAttention = BertSdpaAttention
-    
-        except Exception as _e:
-            print("Compat shim (BERT SDPA @loader) failed:", _e)
-    
-        # ---- Load pipeline .joblib ----
+        import joblib
         if not os.path.exists(path_joblib):
             raise FileNotFoundError(
                 f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan artifact .joblib sudah diunggah."
+                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
             )
-        return joblib.load(path_joblib)
-
+        pipe = joblib.load(path_joblib)
+        return pipe
 
     def predict_sentiment(pipe, txt: str):
         pred = pipe.predict([txt])[0]
@@ -1512,7 +1340,7 @@ elif pr_feature == "Technical":
         return None, np.nan
 
     # ---------- Load data utama ----------
-    MASTER_PATH = repo_path("result_df_streamlit.csv")
+    MASTER_PATH = "/content/result_df_streamlit.csv"
     try:
         master_df_tech = _load_master_df_tech(MASTER_PATH)
         if "stocks_tech" not in st.session_state:
@@ -1568,11 +1396,10 @@ elif pr_feature == "Technical":
         # Cari Actual (Next Day) dari gabungan sumber harga
         next_day = (pd.to_datetime(win_end_local) + pd.Timedelta(days=1)).date()
         PRICE_PATHS = [
-            repo_path("df_stock2.csv"),
-            repo_path("df_stock_fix_1April (1).csv"),
-            repo_path("df_stock.csv"),
+            "/content/df_stock2.csv",                 # scraping terbaru
+            "/content/df_stock_fix_1April (1).csv",   # lama s/d 1 April
+            "/content/df_stock.csv"                   # fallback
         ]
-
         price_catalog = load_price_catalog(PRICE_PATHS)
         found_dt, actual_val = find_actual_and_trading_date(
             ticker=ticker_for_train,
@@ -1637,7 +1464,7 @@ elif pr_feature == "Sentiment + Technical":
     translate_opt = st.toggle("🔁 Translate automatically to English (recommended)", value=True)
     run_predict_btn = st.button("🧪 Predict your News", use_container_width=True)
 
-    PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
+    PATH_PIPELINE = "/content/sentiment_pipeline_sbert_linsvc.joblib"
 
     # SBERT encoder (agar pipeline joblib yang berisi SBERTEncoder bisa dikenali)
     from sklearn.base import BaseEstimator, TransformerMixin
@@ -1659,8 +1486,6 @@ elif pr_feature == "Sentiment + Technical":
             self.normalize_embeddings = normalize_embeddings
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
-            _ensure_pad_token_for_sbert(self._encoder)  # <<< tambahkan ini
-
 
         def fit(self, X, y=None): return self
         def transform(self, X):
@@ -1689,29 +1514,15 @@ elif pr_feature == "Sentiment + Technical":
             return text
 
     @st.cache_resource(show_spinner=True)
-    @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        import joblib, os
-        # ---- JIT patch (penting) ----
-        import importlib
-        try:
-            mb = importlib.import_module("transformers.models.bert.modeling_bert")
-            if not hasattr(mb, "BertSdpaSelfAttention") and hasattr(mb, "BertSelfAttention"):
-                class BertSdpaSelfAttention(mb.BertSelfAttention): ...
-                mb.BertSdpaSelfAttention = BertSdpaSelfAttention
-            if not hasattr(mb, "BertSdpaSelfOutput") and hasattr(mb, "BertSelfOutput"):
-                class BertSdpaSelfOutput(mb.BertSelfOutput): ...
-                mb.BertSdpaSelfOutput = BertSdpaSelfOutput
-            if not hasattr(mb, "BertSdpaAttention") and hasattr(mb, "BertAttention"):
-                class BertSdpaAttention(mb.BertAttention): ...
-                mb.BertSdpaAttention = BertSdpaAttention
-        except Exception as _e:
-            print("Compat shim (BERT SDPA @loader) failed:", _e)
-    
+        import joblib
         if not os.path.exists(path_joblib):
-            raise FileNotFoundError(f"File pipeline tidak ditemukan: {path_joblib}")
-        return joblib.load(path_joblib)
-
+            raise FileNotFoundError(
+                f"File pipeline tidak ditemukan: {path_joblib}. "
+                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
+            )
+        pipe = joblib.load(path_joblib)
+        return pipe
 
     def predict_sentiment(pipe, txt: str):
         pred = pipe.predict([txt])[0]
@@ -2074,8 +1885,7 @@ elif pr_feature == "Sentiment + Technical":
         return None, np.nan
 
     # === Load data utama ===
-    MASTER_PATH = repo_path("result_df_streamlit.csv")
-
+    MASTER_PATH = "/content/result_df_streamlit.csv"
     try:
         master_df_mix = _load_master_df_mix(MASTER_PATH)
         if "stocks_mix" not in st.session_state:
@@ -2234,11 +2044,10 @@ elif pr_feature == "Sentiment + Technical":
             # Next-day actual dari katalog
             next_day = (pd.to_datetime(win_end_local) + pd.Timedelta(days=1)).date()
             PRICE_PATHS = [
-                repo_path("df_stock2.csv"),
-                repo_path("df_stock_fix_1April (1).csv"),
-                repo_path("df_stock.csv"),
+                "/content/df_stock2.csv",
+                "/content/df_stock_fix_1April (1).csv",
+                "/content/df_stock.csv"
             ]
-
             price_catalog = load_price_catalog(PRICE_PATHS)
             found_dt, actual_val = find_actual_and_trading_date(
                 ticker=ticker_for_train,
