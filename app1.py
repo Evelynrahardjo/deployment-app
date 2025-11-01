@@ -920,7 +920,7 @@ if pr_feature == "Sentiment":
     
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
             _ENSURE_PAD_TOKEN_FOR_ST_MODEL(self._encoder)   # ✅ tokenizer aman
-            _ENSURE_ST_ENCODER_OK(self._encoder)      <<< PENTING
+            _ENSURE_ST_ENCODER_OK(self._encoder)      # <<< PENTING
     
         def transform(self, X):
             import pandas as pd
@@ -928,7 +928,8 @@ if pr_feature == "Sentiment":
     
             # panggil lagi (idempotent) sebelum encode
             _ENSURE_PAD_TOKEN_FOR_ST_MODEL(self._encoder)
-            _ENSURE_ST_ENCODER_OK(self._encoder)   # ✅ PENTING
+            _ENSURE_ST_ENCODER_OK(self._encoder)   
+    # ✅ PENTING
     
             embs = self._encoder.encode(
                 texts,
@@ -1971,7 +1972,8 @@ if pr_feature == "Sentiment + Technical":
     
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
             _ENSURE_PAD_TOKEN_FOR_ST_MODEL(self._encoder)   # ✅ tokenizer aman
-            _ENSURE_ST_ENCODER_OK(self._encoder)   # <<< PENTING
+            _ENSURE_ST_ENCODER_OK(self._encoder)  # <<< PENTING
+  # <<< PENTING
       # ✅ INI YANG PENTING
     
         def transform(self, X):
@@ -1980,7 +1982,8 @@ if pr_feature == "Sentiment + Technical":
     
             # panggil lagi (idempotent) sebelum encode
             _ENSURE_PAD_TOKEN_FOR_ST_MODEL(self._encoder)
-            _ENSURE_ST_ENCODER_OK(self._encoder)  # ✅ PENTING
+            _ENSURE_ST_ENCODER_OK(self._encoder)  # <<< PENTING
+  # ✅ PENTING
     
             embs = self._encoder.encode(
                 texts,
@@ -1990,11 +1993,6 @@ if pr_feature == "Sentiment + Technical":
                 normalize_embeddings=self.normalize_embeddings,
             )
             return embs
-
-
-
-    
-
 
     @st.cache_resource(show_spinner=False)
 
