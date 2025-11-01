@@ -693,7 +693,7 @@ if pr_feature == "Sentiment":
         if tok is not None:
             _ensure_tokenizer_tokens(tok)
 
-        def _ensure_transformer_config_defaults(st_model):
+    def _ensure_transformer_config_defaults(st_model):
         """
         Beberapa artefak lama tidak menyertakan field di BertConfig.
         Paksa isi default agar transformers terbaru tidak `AttributeError`.
@@ -709,21 +709,18 @@ if pr_feature == "Sentiment":
             if cfg is None:
                 return
     
-            # Field yang sering hilang pada artefak lama
             defaults = {
                 "output_attentions": False,
                 "output_hidden_states": False,
                 "is_decoder": False,
                 "add_cross_attention": False,
-                "use_cache": False,          # untuk decoder; aman False di encoder
-                "torchscript": False,        # kadang disentuh beberapa wrapper
+                "use_cache": False,
+                "torchscript": False,
             }
             for k, v in defaults.items():
                 if not hasattr(cfg, k):
                     setattr(cfg, k, v)
     
-            # Bonus: pastikan return_dict default aman; forward sudah pakai return_dict=False,
-            # tapi tidak ada salahnya set juga di config jika tersedia.
             try:
                 if hasattr(cfg, "return_dict") and cfg.return_dict is None:
                     cfg.return_dict = False
