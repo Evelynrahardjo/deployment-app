@@ -587,7 +587,6 @@ if pr_feature == "Sentiment":
         except Exception:
             return text
 
-    @st.cache_resource(show_spinner=True)
     # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
     # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
   # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
@@ -619,6 +618,7 @@ def load_pipeline(path_joblib: str):
         )
     pipe = joblib.load(path_joblib)
     return pipe
+
 
 
 def predict_sentiment(pipe, txt: str):
