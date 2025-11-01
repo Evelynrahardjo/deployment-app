@@ -762,11 +762,7 @@ if pr_feature == "Sentiment":
             # jangan biarkan compat ini meledak
             pass
 
-    
     class SBERTEncoder(BaseEstimator, TransformerMixin):
-        """
-        NOTE: KELAS INI HARUS TOP-LEVEL dan terdefinisi sblm joblib.load.
-        """
         def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
                      batch_size=64, normalize_embeddings=True, device=None):
             if SentenceTransformer is None:
@@ -776,7 +772,7 @@ if pr_feature == "Sentiment":
             self.normalize_embeddings = normalize_embeddings
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
-            _ensure_pad_token_for_st_model(self._encoder)
+            _ensure_pad_token_for_st_model(self._encoder)  # <<— WAJIB
     
         def fit(self, X, y=None):
             return self
@@ -784,8 +780,7 @@ if pr_feature == "Sentiment":
         def transform(self, X):
             import pandas as pd
             texts = pd.Series(X).astype(str).tolist()
-            # pastikan tokenizer aman setiap kali transform
-            _ensure_pad_token_for_st_model(self._encoder)
+            _ensure_pad_token_for_st_model(self._encoder)  # <<— panggil lagi sebelum encode
             embs = self._encoder.encode(
                 texts,
                 batch_size=self.batch_size,
@@ -794,6 +789,8 @@ if pr_feature == "Sentiment":
                 normalize_embeddings=self.normalize_embeddings,
             )
             return embs
+
+
     
     # ==== Daftarkan alias ke __main__ supaya unpickle tidak gagal ====
     def _register_pickle_aliases():
@@ -867,11 +864,38 @@ if pr_feature == "Sentiment":
     # ==== LOAD PIPELINE (PENTING: register alias dulu) ====
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        _register_pickle_aliases()  # <- inilah kunci agar unpickle kenal SBERTEncoder
-        import joblib, os
+        import joblib, collections
         if not os.path.exists(path_joblib):
             raise FileNotFoundError(f"File pipeline tidak ditemukan: {path_joblib}")
-        return joblib.load(path_joblib)
+        pipe = joblib.load(path_joblib)
+    
+        # --- Post-load fix: cari semua objek yang punya ._encoder bertipe SentenceTransformer
+        def _fix_obj(obj):
+            try:
+                enc = getattr(obj, "_encoder", None)
+                if enc is not None:
+                    _ensure_pad_token_for_st_model(enc)
+            except Exception:
+                pass
+    
+        # 1) langsung di root
+        _fix_obj(pipe)
+    
+        # 2) kalau sklearn/imbpipeline dengan named_steps/steps
+        for attr in ("named_steps", "steps"):
+            comp = getattr(pipe, attr, None)
+            if comp:
+                # dict-like or list-like
+                try:
+                    items = comp.items() if hasattr(comp, "items") else comp
+                    for it in items:
+                        step = it[1] if isinstance(it, tuple) and len(it) == 2 else it
+                        _fix_obj(step)
+                except Exception:
+                    pass
+    
+        return pipe
+
 
 
     def predict_sentiment(pipe, txt: str):
@@ -1766,25 +1790,30 @@ if pr_feature == "Sentiment + Technical":
         def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
                      batch_size=64, normalize_embeddings=True, device=None):
             if SentenceTransformer is None:
-                raise ImportError("Missing sentence-transformers. Install dulu: pip install -q sentence-transformers")
+                raise ImportError("Missing sentence-transformers. Install: pip install sentence-transformers")
             self.model_name = model_name
             self.batch_size = batch_size
             self.normalize_embeddings = normalize_embeddings
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
+            _ensure_pad_token_for_st_model(self._encoder)  # <<— WAJIB
     
-            # ✅ FIX tokenizer pad-token untuk kompatibilitas versi
-            _ensure_pad_token_for_st_model(self._encoder)
-
-
-        def fit(self, X, y=None): return self
+        def fit(self, X, y=None):
+            return self
+    
         def transform(self, X):
+            import pandas as pd
             texts = pd.Series(X).astype(str).tolist()
+            _ensure_pad_token_for_st_model(self._encoder)  # <<— panggil lagi sebelum encode
             embs = self._encoder.encode(
-                texts, batch_size=self.batch_size, show_progress_bar=False,
-                convert_to_numpy=True, normalize_embeddings=self.normalize_embeddings,
+                texts,
+                batch_size=self.batch_size,
+                show_progress_bar=False,
+                convert_to_numpy=True,
+                normalize_embeddings=self.normalize_embeddings,
             )
             return embs
+
 
     @st.cache_resource(show_spinner=False)
 
@@ -1799,14 +1828,38 @@ if pr_feature == "Sentiment + Technical":
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        import joblib
+        import joblib, collections
         if not os.path.exists(path_joblib):
-            raise FileNotFoundError(
-                f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
-            )
+            raise FileNotFoundError(f"File pipeline tidak ditemukan: {path_joblib}")
         pipe = joblib.load(path_joblib)
+    
+        # --- Post-load fix: cari semua objek yang punya ._encoder bertipe SentenceTransformer
+        def _fix_obj(obj):
+            try:
+                enc = getattr(obj, "_encoder", None)
+                if enc is not None:
+                    _ensure_pad_token_for_st_model(enc)
+            except Exception:
+                pass
+    
+        # 1) langsung di root
+        _fix_obj(pipe)
+    
+        # 2) kalau sklearn/imbpipeline dengan named_steps/steps
+        for attr in ("named_steps", "steps"):
+            comp = getattr(pipe, attr, None)
+            if comp:
+                # dict-like or list-like
+                try:
+                    items = comp.items() if hasattr(comp, "items") else comp
+                    for it in items:
+                        step = it[1] if isinstance(it, tuple) and len(it) == 2 else it
+                        _fix_obj(step)
+                except Exception:
+                    pass
+    
         return pipe
+
 
     def predict_sentiment(pipe, txt: str):
         pred = pipe.predict([txt])[0]
@@ -2984,14 +3037,38 @@ if pr_feature == "Sentiment":
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        import joblib
+        import joblib, collections
         if not os.path.exists(path_joblib):
-            raise FileNotFoundError(
-                f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
-            )
+            raise FileNotFoundError(f"File pipeline tidak ditemukan: {path_joblib}")
         pipe = joblib.load(path_joblib)
+    
+        # --- Post-load fix: cari semua objek yang punya ._encoder bertipe SentenceTransformer
+        def _fix_obj(obj):
+            try:
+                enc = getattr(obj, "_encoder", None)
+                if enc is not None:
+                    _ensure_pad_token_for_st_model(enc)
+            except Exception:
+                pass
+    
+        # 1) langsung di root
+        _fix_obj(pipe)
+    
+        # 2) kalau sklearn/imbpipeline dengan named_steps/steps
+        for attr in ("named_steps", "steps"):
+            comp = getattr(pipe, attr, None)
+            if comp:
+                # dict-like or list-like
+                try:
+                    items = comp.items() if hasattr(comp, "items") else comp
+                    for it in items:
+                        step = it[1] if isinstance(it, tuple) and len(it) == 2 else it
+                        _fix_obj(step)
+                except Exception:
+                    pass
+    
         return pipe
+
 
     def predict_sentiment(pipe, txt: str):
         pred = pipe.predict([txt])[0]
@@ -3893,14 +3970,38 @@ if pr_feature == "Sentiment + Technical":
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        import joblib
+        import joblib, collections
         if not os.path.exists(path_joblib):
-            raise FileNotFoundError(
-                f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
-            )
+            raise FileNotFoundError(f"File pipeline tidak ditemukan: {path_joblib}")
         pipe = joblib.load(path_joblib)
+    
+        # --- Post-load fix: cari semua objek yang punya ._encoder bertipe SentenceTransformer
+        def _fix_obj(obj):
+            try:
+                enc = getattr(obj, "_encoder", None)
+                if enc is not None:
+                    _ensure_pad_token_for_st_model(enc)
+            except Exception:
+                pass
+    
+        # 1) langsung di root
+        _fix_obj(pipe)
+    
+        # 2) kalau sklearn/imbpipeline dengan named_steps/steps
+        for attr in ("named_steps", "steps"):
+            comp = getattr(pipe, attr, None)
+            if comp:
+                # dict-like or list-like
+                try:
+                    items = comp.items() if hasattr(comp, "items") else comp
+                    for it in items:
+                        step = it[1] if isinstance(it, tuple) and len(it) == 2 else it
+                        _fix_obj(step)
+                except Exception:
+                    pass
+    
         return pipe
+
 
     def predict_sentiment(pipe, txt: str):
         pred = pipe.predict([txt])[0]
