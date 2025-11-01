@@ -1,37 +1,27 @@
 # ==== Ultra-early COMPAT SHIM untuk artefak .joblib lama (JANGAN HAPUS) ====
 import sys, types
-
-# Buat modul palsu `sentence_transformers.model_card` jika belum ada
 if "sentence_transformers.model_card" not in sys.modules:
     _mc = types.ModuleType("sentence_transformers.model_card")
-
-    # Placeholder minimal yang cukup untuk proses unpickle
     class _ModelCard: ...
     class _SentenceTransformerModelCardData:
-        # Beberapa artefak lama mengakses atribut seperti .modelId, .revision, dll.
-        # Kita sediakan default agar aman dibaca tapi tidak dipakai.
         def __init__(self, **kwargs):
             for k, v in kwargs.items():
                 setattr(self, k, v)
-
     _mc.ModelCard = _ModelCard
     _mc.SentenceTransformerModelCardData = _SentenceTransformerModelCardData
-
     sys.modules["sentence_transformers.model_card"] = _mc
 # ==== END SHIM ====
 
-
 # =========================================
 # IMPORTS
 # =========================================
-import os
-import re
-import hashlib
-import tempfile
+import os, re, hashlib, tempfile
+from pathlib import Path
+from datetime import datetime, timedelta
+
 import streamlit as st
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
 
 # Plotly
 import plotly.express as px
@@ -42,58 +32,13 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-# =========================================
-# IMPORTS
-# =========================================
-import os
-import streamlit as st
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-from pathlib import Path  # ✅ tambahan ini
-
 # ==== PATH HELPERS ====
 APP_DIR = Path(__file__).parent.resolve()
-
-# %%writefile app.py
-# =========================================
-# IMPORTS
-# =========================================
-import os
-import streamlit as st
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-
-# Plotly
-import plotly.express as px
-import plotly.graph_objects as go
-
-# Sklearn
-from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-
-# =========================================
-# IMPORTS
-# =========================================
-import os
-import streamlit as st
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-from pathlib import Path  # ✅ tambahan ini
-
-# ==== PATH HELPERS ====
-APP_DIR = Path(__file__).parent.resolve()
-
 def repo_path(*parts: str) -> str:
     """Build absolute path safely for Streamlit Cloud or local."""
     return str(APP_DIR.joinpath(*parts))
 
-# ==== MODEL DOWNLOADER (load dari st.secrets["MODEL_URL"]) ====
-import hashlib, tempfile, re
-
+# ==== MODEL DOWNLOADER (ambil dari st.secrets["MODEL_URL"] atau ENV) ====
 def _normalize_gdrive_url(url: str) -> str:
     """
     Support 2 pola:
@@ -102,10 +47,8 @@ def _normalize_gdrive_url(url: str) -> str:
     """
     if not url:
         return url
-    # Jika sudah uc?id=...
     if "drive.google.com/uc?id=" in url:
         return url
-    # Ubah /file/d/<id>/view --> uc?id=<id>
     m = re.search(r"drive\.google\.com/file/d/([^/]+)/", url)
     if m:
         return f"https://drive.google.com/uc?id={m.group(1)}"
@@ -125,34 +68,34 @@ def _download_with_requests(url: str, dst_path: str):
         prog = st.progress(0.0) if total else None
         downloaded = 0
         with open(dst_path, "wb") as f:
-            for i, b in enumerate(r.iter_content(chunk_size=chunk)):
-                if b:
-                    f.write(b)
-                    if total:
-                        downloaded += len(b)
-                        prog.progress(min(1.0, downloaded / total))
+            for b in r.iter_content(chunk_size=chunk):
+                if not b:
+                    continue
+                f.write(b)
+                if total:
+                    downloaded += len(b)
+                    prog.progress(min(1.0, downloaded / total))
         if prog:
             prog.empty()
 
 def _download_model_once(model_url: str) -> str:
     """
     Download sekali lalu cache ke folder 'models/'. Return path lokal.
-    Prioritas: gdown (jika ada) -> requests.
+    Prioritas: gdown (jika ada) → requests.
     """
     os.makedirs(repo_path("models"), exist_ok=True)
     norm = _normalize_gdrive_url(model_url)
     local_name = _safe_filename_from_url(norm)
     local_path = repo_path("models", local_name)
+
     if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
         return local_path
 
     with st.spinner("⬇️ Downloading sentiment pipeline from MODEL_URL..."):
-        # 1) coba gdown jika tersedia (lebih andal untuk file besar GDrive)
         try:
             import gdown  # pip install gdown
             gdown.download(url=norm, output=local_path, quiet=False, fuzzy=True)
         except Exception:
-            # 2) fallback ke requests
             _download_with_requests(norm, local_path)
 
     if not os.path.exists(local_path) or os.path.getsize(local_path) == 0:
@@ -169,12 +112,10 @@ def get_pipeline_local_path() -> str:
         raise RuntimeError("MODEL_URL tidak ditemukan di st.secrets atau ENV.")
     return _download_model_once(url)
 
-
 # =========================================
 # CONFIG & THEME
 # =========================================
 st.set_page_config(page_title="INDONESIA BANKING STOCK PRICE PREDICTION", page_icon="📈", layout="wide")
-
 st.markdown("""
 <style>
 /* ====== Header ====== */
@@ -183,61 +124,22 @@ header, [data-testid="stHeader"] {
     color: #000 !important;
     border-bottom: 1px solid #e3d7ff;
 }
-
-/* ====== Konten utama ====== */
 .stApp { background-color: #f6f0ff; color: #000000; }
-
-/* ====== Sidebar ====== */
-[data-testid="stSidebar"] {
-    background-color: #d9caff; color: #000; padding-top: 0.5rem;
-}
+[data-testid="stSidebar"] { background-color: #d9caff; color: #000; padding-top: 0.5rem; }
 [data-testid="stSidebar"] [role="radiogroup"] > div > div:first-child { display: none !important; }
 [data-testid="stSidebar"] * { color: #000 !important; font-weight: 600; font-size: 17px; }
 [data-testid="stSidebar"] label:hover { background-color: #e9e0ff !important; border-radius: 8px; transition: all 0.3s ease; }
-
-/* ====== FORM LABELS ====== */
-label, .stRadio label p, .stDateInput label p, .stSelectbox label p { color: #000 !important; font-weight: 600 !important; }
-
-/* ====== RADIO TEXT ====== */
-.stRadio div[role="radio"] p { color: #000 !important; font-weight: 600 !important; }
-
-/* ====== INPUT TEXT ====== */
-.stDateInput input, .stSelectbox div[data-baseweb="select"] input { color: white !important; }
-
-/* Headings/links */
 h1, h2, h3 { color: #5b21b6; } a, a:visited, a:hover { color: #111; }
-
-/* ====== Toggle sidebar ====== */
-button[aria-label="Toggle sidebar"], [data-testid="collapsedControl"], button[kind="header"]{
-    background-color: #f6f0ff !important; border: 1px solid #d3c4ff !important;
-    border-radius: 8px !important; box-shadow: 0 0 4px rgba(0,0,0,0.1) !important; opacity: 1 !important;
-}
-button[aria-label="Toggle sidebar"] svg path, [data-testid="collapsedControl"] svg path, button[kind="header"] svg path {
-    fill: #000000 !important; stroke: #000000 !important; opacity: 1 !important;
-}
-button[aria-label="Toggle sidebar"]:hover, [data-testid="collapsedControl"]:hover, button[kind="header"]:hover {
-    background-color: #e9e0ff !important; border-color: #bfa8ff !important; transform: scale(1.05);
-    transition: all 0.2s ease-in-out;
-}
-
-/* ===== Buttons ===== */
 .stButton > button{ color:#fff !important; background:#1f2937 !important; border:1px solid #bfa8ff !important; border-radius:10px !important; font-weight:700 !important; }
 .stButton > button:hover{ background:#374151 !important; }
-.stButton > button:focus:not(:active){ box-shadow:0 0 0 3px rgba(91,33,182,.25) !important; }
-
-/* TextArea */
 .stTextArea textarea{ color:#ffffff !important; }
-.stTextArea textarea::placeholder{ color:#e5e7eb !important; opacity:1 !important; }
-
-/* Alerts */
 .stAlert { color:#000 !important; font-weight:600 !important; }
-
 .block-container { padding-top: 1.2rem; }
 </style>
 """, unsafe_allow_html=True)
 
 # =========================================
-# NAVIGATION
+# NAVIGATION (satu saja)
 # =========================================
 page = st.sidebar.radio(
     "Navigation",
