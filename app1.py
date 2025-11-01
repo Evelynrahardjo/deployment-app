@@ -128,10 +128,11 @@ def _ENSURE_PAD_TOKEN_FOR_ST_MODEL(st_model):
 # ==== END ULTRA-EARLY ====
 
 
-# 4) Jadikan helper global agar bisa dipanggil setelah unpickle
-globals()["_CFG_SET_DEFAULTS"] = _cfg_set_defaults
-globals()["_ENSURE_ST_ENCODER_OK"] = _ensure_st_encoder_ok
-globals()["_ENSURE_PAD_TOKEN_FOR_ST_MODEL"] = _ensure_pad_token_for_st_model
+globals()["_CFG_SET_DEFAULTS"] = _cfg_set_defaults        # <- kalau kamu memang mendefinisikan _cfg_set_defaults
+globals()["_ENSURE_ST_ENCODER_OK"] = _ENSURE_ST_ENCODER_OK
+globals()["_ENSURE_PAD_TOKEN_FOR_ST_MODEL"] = _ENSURE_PAD_TOKEN_FOR_ST_MODEL
+
+
 # ==== END ULTRA-EARLY HF CONFIG COMPAT ====
 
 
