@@ -1550,6 +1550,7 @@ elif pr_feature == "Sentiment + Technical":
     # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
     # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
 
+# ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
 try:
     import sentence_transformers.model_card  # ✅ kalau modulnya ada, lanjut normal
 except Exception:
@@ -1565,28 +1566,16 @@ except Exception:
     sys.modules["sentence_transformers.model_card"] = mc
 # ==== END PATCH ====
 
-
 @st.cache_resource(show_spinner=True)
 def load_pipeline(path_joblib: str):
     import joblib
     if not os.path.exists(path_joblib):
         raise FileNotFoundError(
             f"File pipeline tidak ditemukan: {path_joblib}. "
-            "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
+            "Pastikan telah menyimpan/unggah 'sentiment_pipeline_sbert_linsvc.joblib'."
         )
     pipe = joblib.load(path_joblib)
     return pipe
-
-    @st.cache_resource(show_spinner=True)
-    def load_pipeline(path_joblib: str):
-        import joblib
-        if not os.path.exists(path_joblib):
-            raise FileNotFoundError(
-                f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
-            )
-        pipe = joblib.load(path_joblib)
-        return pipe
 
     def predict_sentiment(pipe, txt: str):
         pred = pipe.predict([txt])[0]
