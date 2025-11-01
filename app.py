@@ -37,6 +37,36 @@ def repo_path(*parts: str) -> str:
     """Build absolute path safely for Streamlit Cloud or local."""
     return str(APP_DIR.joinpath(*parts))
 
+# ==== MODEL FILE HELPERS (taruh DI ATAS, setelah imports & repo_path) ====
+import io, re, os
+
+def is_git_lfs_pointer(path: str) -> bool:
+    """True jika file adalah POINTER Git LFS (bukan artefak biner)."""
+    if not os.path.exists(path) or os.path.isdir(path):
+        return False
+    try:
+        with open(path, "rb") as f:
+            head = f.read(300)
+        return b"version https://git-lfs.github.com/spec/v1" in head
+    except Exception:
+        return False
+
+def ensure_model_file(path_joblib: str) -> None:
+    """
+    Cek keberadaan & bukan pointer. (Bisa kamu perluas utk auto-download dari st.secrets["MODEL_URL"])
+    """
+    if not os.path.exists(path_joblib):
+        raise FileNotFoundError(
+            f"Model tidak ditemukan: {path_joblib}. "
+            "Upload artefak biner asli (.joblib), bukan pointer."
+        )
+    if is_git_lfs_pointer(path_joblib):
+        raise RuntimeError(
+            "Terdeteksi Git LFS POINTER, bukan artefak biner. "
+            "Pastikan push LFS-nya berhasil (dan Streamlit Cloud menarik konten LFS)."
+        )
+
+
 # ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
 import sys, types
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -164,11 +194,12 @@ button[aria-label="Toggle sidebar"]:hover, [data-testid="collapsedControl"]:hove
 # NAVIGATION
 # =========================================
 page = st.sidebar.radio(
-    label="",
+    label="Navigation",  # wajib non-empty tapi boleh disembunyikan
     options=["🏠 Home","📊 Dashboard","🧮 Prediction Request and Results"],
     index=1,
     label_visibility="collapsed",
 )
+
 
 # =========================================
 # HOME
@@ -597,14 +628,24 @@ if pr_feature == "Sentiment":
 
     # PATH_PIPELINE = "/content/sentiment_pipeline_sbert_linsvc.joblib"
 
-    PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
+    # PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
 
     # Pastikan file beneran biner (bukan pointer) – dan/atau unduh dari MODEL_URL kalau perlu
-    if not os.path.exists(PATH_PIPELINE) or is_git_lfs_pointer(PATH_PIPELINE):
-        ensure_model_file(PATH_PIPELINE)
+    if run_predict_btn:
+        if not user_text.strip():
+            st.warning("Masukkan berita terlebih dahulu ya.")
+        else:
+            text_input = user_text.strip()
+            text_for_model = safe_translate_to_en(text_input) if translate_opt else text_input
     
-    pipe = load_pipeline(PATH_PIPELINE)
-    y_pred, score = predict_sentiment(pipe, text_for_model)
+            PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
+            ensure_model_file(PATH_PIPELINE)  # cek ada & bukan pointer
+    
+            with st.spinner("🔧 Loading pipeline & running inference..."):
+                pipe = load_pipeline(PATH_PIPELINE)      # fungsi sudah didefinisikan di atas
+                y_pred, score = predict_sentiment(pipe, text_for_model)
+            # ... lanjut normalisasi label & tampilkan hasil
+
 
 
 
@@ -1602,14 +1643,24 @@ elif pr_feature == "Sentiment + Technical":
     translate_opt = st.toggle("🔁 Translate automatically to English (recommended)", value=True)
     run_predict_btn = st.button("🧪 Predict your News", use_container_width=True)
 
-    PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
+    #PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
     
     # Pastikan file beneran biner (bukan pointer) – dan/atau unduh dari MODEL_URL kalau perlu
-    if not os.path.exists(PATH_PIPELINE) or is_git_lfs_pointer(PATH_PIPELINE):
-        ensure_model_file(PATH_PIPELINE)
+    if run_predict_btn:
+        if not user_text.strip():
+            st.warning("Masukkan berita terlebih dahulu ya.")
+        else:
+            text_input = user_text.strip()
+            text_for_model = safe_translate_to_en(text_input) if translate_opt else text_input
     
-    pipe = load_pipeline(PATH_PIPELINE)
-    y_pred, score = predict_sentiment(pipe, text_for_model)
+            PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
+            ensure_model_file(PATH_PIPELINE)
+    
+            with st.spinner("🔧 Loading pipeline & running inference..."):
+                pipe = load_pipeline(PATH_PIPELINE)
+                y_pred, score = predict_sentiment(pipe, text_for_model)
+            # ... lanjut tampilkan hasil
+
 
 
     # SBERT encoder (agar pipeline joblib yang berisi SBERTEncoder bisa dikenali)
