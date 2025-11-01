@@ -58,10 +58,9 @@ def ensure_model_file(path_joblib: str) -> None:
     - file adalah Git LFS pointer: coba unduh dari st.secrets["MODEL_URL"] dan timpa.
     """
     import requests
-    from streamlit.runtime.secrets import get_secret
 
     def _is_pointer(p: str) -> bool:
-        if not os.path.exists(p) or os.path.isdir(p): 
+        if not os.path.exists(p) or os.path.isdir(p):
             return False
         with open(p, "rb") as f:
             head = f.read(300)
@@ -73,12 +72,12 @@ def ensure_model_file(path_joblib: str) -> None:
         with open(dst, "wb") as f:
             f.write(r.content)
 
+    # ⬇️ ini yang benar
     model_url = None
     try:
-        # aman kalau secret tidak ada
-        model_url = get_secret("MODEL_URL")
+        model_url = st.secrets.get("MODEL_URL", None)
     except Exception:
-        pass
+        model_url = None
 
     # 1) jika file belum ada → coba unduh
     if not os.path.exists(path_joblib):
@@ -94,15 +93,13 @@ def ensure_model_file(path_joblib: str) -> None:
     if _is_pointer(path_joblib):
         if model_url:
             _download(model_url, path_joblib)
-            # verifikasi ulang setelah unduh
             if _is_pointer(path_joblib):
                 raise RuntimeError(
                     "MODEL_URL terunduh tetapi masih pointer. Pastikan URL mengarah ke biner .joblib."
                 )
         else:
             raise RuntimeError(
-                "Terdeteksi Git LFS POINTER. Set st.secrets['MODEL_URL'] "
-                "ke URL biner .joblib (Hugging Face/Drive/S3) agar auto-download."
+                "Terdeteksi Git LFS POINTER. Set st.secrets['MODEL_URL'] ke URL biner .joblib."
             )
 
 
