@@ -1,15 +1,15 @@
-# Core stack (SBERT MiniLM, Py3.12)
+# Core stack
 torch==2.2.2
 transformers==4.41.1
-sentence-transformers==2.7.0
-tokenizers==0.19.1
+sentence-transformers==2.2.2   # ↓ versi lebih lama, punya 'model_card'
+tokenizers==0.15.2             # aman untuk banyak artefak lama
 
 # SciPy stack
 numpy==1.26.4
 scipy==1.11.4
 scikit-learn==1.4.2
 joblib==1.3.2
-imbalanced-learn==0.12.3   # <<< TAMBAHKAN INI
+imbalanced-learn==0.12.3
 
 # Streamlit & utils
 streamlit==1.37.1
