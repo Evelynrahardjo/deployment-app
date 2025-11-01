@@ -45,11 +45,11 @@ except Exception:
 # ==== HF CONFIG COMPAT: isi default untuk artefak lama ====
 def _ensure_transformer_config_defaults(st_model):
     """
-    Isi default di config transformer agar tidak AttributeError
-    pada artefak lama (BertConfig dkk) yang belum punya field ini.
-    Idempotent & aman dipanggil berulang.
+    Tambahkan field default ke config BERT agar tidak AttributeError
+    pada artefak lama. Aman dipanggil berulang.
     """
     try:
+        # Ambil modul pertama (Transformer) dari SentenceTransformer
         first_mod = st_model._first_module()
         core = getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None)
         if core is None:
@@ -70,12 +70,13 @@ def _ensure_transformer_config_defaults(st_model):
             if not hasattr(cfg, k):
                 setattr(cfg, k, v)
 
-        # beberapa artefak lama set None
-        if hasattr(cfg, "return_dict") and cfg.return_dict is None:
-            cfg.return_dict = False
+        # Beberapa artefak lama menyetel None
+        if not hasattr(cfg, "return_dict") or getattr(cfg, "return_dict", None) is None:
+            setattr(cfg, "return_dict", False)
     except Exception:
-        # jangan biarkan compat meledak
+        # Jangan biarkan compat ini meledak
         pass
+
 
 # ==== END SHIM ====
 
@@ -727,42 +728,6 @@ if pr_feature == "Sentiment":
         if tok is not None:
             _ensure_tokenizer_tokens(tok)
 
-    def _ensure_transformer_config_defaults(st_model):
-        """
-        Beberapa artefak lama tidak menyertakan field di BertConfig.
-        Paksa isi default agar transformers terbaru tidak `AttributeError`.
-        Aman dipanggil berulang-ulang.
-        """
-        try:
-            # Ambil model dasar dari SentenceTransformer
-            first_mod = st_model._first_module()
-            core = getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None)
-            if core is None:
-                return
-            cfg = getattr(core, "config", None)
-            if cfg is None:
-                return
-    
-            defaults = {
-                "output_attentions": False,
-                "output_hidden_states": False,
-                "is_decoder": False,
-                "add_cross_attention": False,
-                "use_cache": False,
-                "torchscript": False,
-            }
-            for k, v in defaults.items():
-                if not hasattr(cfg, k):
-                    setattr(cfg, k, v)
-    
-            try:
-                if hasattr(cfg, "return_dict") and cfg.return_dict is None:
-                    cfg.return_dict = False
-            except Exception:
-                pass
-        except Exception:
-            # jangan biarkan compat ini meledak
-            pass
 
     # ==== PAD-TOKEN SAFETY untuk tokenizer HF/SBERT ====
     def _ensure_pad_token_for_st_model(st_model):
@@ -844,7 +809,7 @@ if pr_feature == "Sentiment":
     
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
             _ensure_pad_token_for_st_model(self._encoder)           # ✅ tokenizer aman
-            _ensure_transformer_config_defaults(self._encoder)      # ✅ INI YANG PENTING
+            _ensure_transformer_config_defaults(self._encoder)  # <<< PENTING
     
         def transform(self, X):
             import pandas as pd
@@ -1865,7 +1830,8 @@ if pr_feature == "Sentiment + Technical":
     
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
             _ensure_pad_token_for_st_model(self._encoder)           # ✅ tokenizer aman
-            _ensure_transformer_config_defaults(self._encoder)      # ✅ INI YANG PENTING
+            _ensure_transformer_config_defaults(self._encoder)  # <<< PENTING
+      # ✅ INI YANG PENTING
     
         def transform(self, X):
             import pandas as pd
