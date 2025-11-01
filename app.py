@@ -599,6 +599,14 @@ if pr_feature == "Sentiment":
 
     PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
 
+    # Pastikan file beneran biner (bukan pointer) – dan/atau unduh dari MODEL_URL kalau perlu
+    if not os.path.exists(PATH_PIPELINE) or is_git_lfs_pointer(PATH_PIPELINE):
+        ensure_model_file(PATH_PIPELINE)
+    
+    pipe = load_pipeline(PATH_PIPELINE)
+    y_pred, score = predict_sentiment(pipe, text_for_model)
+
+
 
     from sklearn.base import BaseEstimator, TransformerMixin
     try:
@@ -648,21 +656,26 @@ if pr_feature == "Sentiment":
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        """
-        Robust loader untuk artefak joblib yang kadang gagal di Python 3.12
-        (mis. 'KeyError: 118', incompatibility tokenizers/transformers).
-        Strategi:
-          1) joblib.load biasa
-          2) joblib.load dengan mmap_mode='r'
-          3) pickle standar (encoding='latin1') sebagai fallback
-        Semua cabang memberikan pesan yang jelas & saran versi.
-        """
         import os, joblib, pickle, io, traceback
         if not os.path.exists(path_joblib):
             raise FileNotFoundError(
                 f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan sudah mengunggah 'sentiment_pipeline_sbert_linsvc.joblib'."
+                "Pastikan sudah tersedia atau set MODEL_URL di Secrets untuk mengunduh otomatis."
             )
+        # 🔒 Guard: pointer LFS terdeteksi → beri error yang tegas
+        try:
+            with open(path_joblib, "rb") as _f:
+                head = _f.read(200)
+            if b"version https://git-lfs.github.com/spec/v1" in head:
+                raise RuntimeError(
+                    "File model adalah POINTER Git LFS (bukan artefak biner). "
+                    "Perbaiki LFS/hosting atau gunakan ensure_model_file(MODEL_URL)."
+                )
+        except Exception:
+            pass
+    
+        # … lanjut strategi 1/2/3 (joblib → mmap → pickle) seperti sebelumnya
+
     
         # --- helper untuk tulis pesan konsisten ---
         def _compat_help(err: Exception, stage: str):
@@ -1589,8 +1602,15 @@ elif pr_feature == "Sentiment + Technical":
     translate_opt = st.toggle("🔁 Translate automatically to English (recommended)", value=True)
     run_predict_btn = st.button("🧪 Predict your News", use_container_width=True)
 
-    # PATH_PIPELINE = "/content/sentiment_pipeline_sbert_linsvc.joblib"
     PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
+    
+    # Pastikan file beneran biner (bukan pointer) – dan/atau unduh dari MODEL_URL kalau perlu
+    if not os.path.exists(PATH_PIPELINE) or is_git_lfs_pointer(PATH_PIPELINE):
+        ensure_model_file(PATH_PIPELINE)
+    
+    pipe = load_pipeline(PATH_PIPELINE)
+    y_pred, score = predict_sentiment(pipe, text_for_model)
+
 
     # SBERT encoder (agar pipeline joblib yang berisi SBERTEncoder bisa dikenali)
     from sklearn.base import BaseEstimator, TransformerMixin
@@ -1641,21 +1661,26 @@ elif pr_feature == "Sentiment + Technical":
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        """
-        Robust loader untuk artefak joblib yang kadang gagal di Python 3.12
-        (mis. 'KeyError: 118', incompatibility tokenizers/transformers).
-        Strategi:
-          1) joblib.load biasa
-          2) joblib.load dengan mmap_mode='r'
-          3) pickle standar (encoding='latin1') sebagai fallback
-        Semua cabang memberikan pesan yang jelas & saran versi.
-        """
         import os, joblib, pickle, io, traceback
         if not os.path.exists(path_joblib):
             raise FileNotFoundError(
                 f"File pipeline tidak ditemukan: {path_joblib}. "
-                "Pastikan sudah mengunggah 'sentiment_pipeline_sbert_linsvc.joblib'."
+                "Pastikan sudah tersedia atau set MODEL_URL di Secrets untuk mengunduh otomatis."
             )
+        # 🔒 Guard: pointer LFS terdeteksi → beri error yang tegas
+        try:
+            with open(path_joblib, "rb") as _f:
+                head = _f.read(200)
+            if b"version https://git-lfs.github.com/spec/v1" in head:
+                raise RuntimeError(
+                    "File model adalah POINTER Git LFS (bukan artefak biner). "
+                    "Perbaiki LFS/hosting atau gunakan ensure_model_file(MODEL_URL)."
+                )
+        except Exception:
+            pass
+    
+        # … lanjut strategi 1/2/3 (joblib → mmap → pickle) seperti sebelumnya
+
     
         # --- helper untuk tulis pesan konsisten ---
         def _compat_help(err: Exception, stage: str):
