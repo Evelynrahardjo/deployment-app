@@ -31,12 +31,18 @@ if "sentence_transformers.model_card" not in sys.modules:
     sys.modules["sentence_transformers.model_card"] = _mc
 
 # Shim untuk memastikan adanya atribut _pad_token di base tokenizer
+# ==== ULTRA-EARLY HF TOKENIZER COMPAT (kelas dasar) ====
 try:
     from transformers import PreTrainedTokenizerBase
+    # Beberapa artefak lama mengakses atribut privat ini; pastikan ada.
+    if not hasattr(PreTrainedTokenizerBase, "_unk_token"):
+        PreTrainedTokenizerBase._unk_token = None
     if not hasattr(PreTrainedTokenizerBase, "_pad_token"):
         PreTrainedTokenizerBase._pad_token = None
 except Exception:
     pass
+# ==== END ULTRA-EARLY ====
+
 # ==== END SHIM ====
 
 
@@ -640,20 +646,53 @@ if pr_feature == "Sentiment":
     except Exception:
         SentenceTransformer = None
     
-    def _ensure_pad_token_for_st_model(st_model):
+    def _ensure_tokenizer_tokens(tok):
+        """
+        Pastikan tokenizer punya unk_token & pad_token.
+        Aman dipanggil berulang kali.
+        """
+        # --- UNK token ---
         try:
-            tok = getattr(st_model, "tokenizer", None)
-            if tok is None:
-                tok = st_model._first_module().tokenizer  # fallback beberapa versi lama
-            if getattr(tok, "pad_token_id", None) in (None, -1):
+            unk = getattr(tok, "unk_token", None)
+        except Exception:
+            unk = None
+        if unk in (None, "", "None"):
+            try:
+                # fallback umum
+                tok.unk_token = "[UNK]"
+            except Exception:
+                # terakhir: set atribut privat kalau property tak tersedia
+                setattr(tok, "_unk_token", "[UNK]")
+    
+        # --- PAD token ---
+        try:
+            pad = getattr(tok, "pad_token", None)
+        except Exception:
+            pad = None
+        if pad in (None, "", "None") or (hasattr(tok, "pad_token_id") and (tok.pad_token_id is None or tok.pad_token_id < 0)):
+            try:
                 if getattr(tok, "sep_token", None):
                     tok.pad_token = tok.sep_token
                 elif getattr(tok, "eos_token", None):
                     tok.pad_token = tok.eos_token
                 else:
-                    tok.pad_token = tok.pad_token or "[PAD]"
-        except Exception:
-            pass
+                    tok.pad_token = "[PAD]"
+            except Exception:
+                setattr(tok, "_pad_token", "[PAD]")
+    
+    def _ensure_sbert_tokenizer_ok(st_model):
+        """
+        Ambil tokenizer dari SentenceTransformer (across versions) lalu sanitasi.
+        """
+        tok = getattr(st_model, "tokenizer", None)
+        if tok is None:
+            try:
+                tok = st_model._first_module().tokenizer  # fallback utk versi lama
+            except Exception:
+                tok = None
+        if tok is not None:
+            _ensure_tokenizer_tokens(tok)
+
     
     class SBERTEncoder(BaseEstimator, TransformerMixin):
         """
