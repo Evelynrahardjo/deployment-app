@@ -14,13 +14,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
-page = st.sidebar.radio(
-    "Navigation",
-    options=["🏠 Home","📊 Dashboard","🧮 Prediction Request and Results"],
-    index=1,
-    label_visibility="collapsed",
-)
 # ==== Ultra-early COMPAT SHIM untuk artefak .joblib lama (JANGAN HAPUS) ====
 # ==== ULTRA-EARLY HF TOKENIZER COMPAT (JANGAN HAPUS) ====
 # ==== ULTRA-EARLY COMPAT SHIM (JANGAN HAPUS) ====
@@ -35,19 +28,8 @@ try:
 except Exception:
     pass
 
-# ==== ULTRA-EARLY HF/Tokenizer/ModelCard/SDPA COMPAT (PASTE PALING ATAS) ====
-import sys, types
-
-# 1) SDPA BERT (tutup gap versi transformers)
-def _ENSURE_BERT_SDPA_FLAGS(hf_model):
-    try:
-        from transformers.models.bert.modeling_bert import BertSdpaSelfAttention as _Sdpa
-        if not hasattr(_Sdpa, "require_contiguous_qkv"):
-            _Sdpa.require_contiguous_qkv = False
-    except Exception:
-        pass
-
 def _ENSURE_BERT_SDPA_FOR_ST(st_model):
+    """Find the underlying HF model inside a SentenceTransformer and apply SDPA flags."""
     try:
         first_mod = st_model._first_module() if hasattr(st_model, "_first_module") else None
         core = (
@@ -60,7 +42,9 @@ def _ENSURE_BERT_SDPA_FOR_ST(st_model):
     except Exception:
         pass
 
-# 2) Tambah default fields ke config BERT (hindari AttributeError artefak lama)
+# ==== END ULTRA-EARLY ====
+import sys, types
+
 _HF_CFG_DEFAULTS = {
     "output_attentions": False,
     "output_hidden_states": False,
@@ -70,6 +54,7 @@ _HF_CFG_DEFAULTS = {
     "use_cache": False,
     "torchscript": False,
 }
+
 def _cfg_set_defaults(cfg):
     try:
         for k, v in _HF_CFG_DEFAULTS.items():
@@ -80,6 +65,7 @@ def _cfg_set_defaults(cfg):
     except Exception:
         pass
 
+# Patch BertConfig agar instance punya field-field default di atas
 try:
     from transformers.models.bert.configuration_bert import BertConfig as _BertConfig
     _orig_init = _BertConfig.__init__
@@ -90,19 +76,7 @@ try:
 except Exception:
     pass
 
-def _ENSURE_ST_ENCODER_OK(st_model):
-    try:
-        first_mod = getattr(st_model, "_first_module")() if hasattr(st_model, "_first_module") else None
-        core = None
-        if first_mod is not None:
-            core = getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None)
-        core = core or getattr(st_model, "auto_model", None) or getattr(st_model, "model", None)
-        if core is not None and hasattr(core, "config"):
-            _cfg_set_defaults(core.config)
-    except Exception:
-        pass
-
-# 3) Shim modul lama sentence_transformers.model_card
+# Shim modul lama: sentence_transformers.model_card (artefak .joblib lama suka refer ke sini)
 if "sentence_transformers.model_card" not in sys.modules:
     _mc = types.ModuleType("sentence_transformers.model_card")
     class _ModelCard: ...
@@ -114,13 +88,26 @@ if "sentence_transformers.model_card" not in sys.modules:
     _mc.SentenceTransformerModelCardData = _SentenceTransformerModelCardData
     sys.modules["sentence_transformers.model_card"] = _mc
 
-# 4) Tokenizer base: pastikan atribut privat tersedia
+# Tokenizer privat attr kompat
 try:
     from transformers import PreTrainedTokenizerBase
     if not hasattr(PreTrainedTokenizerBase, "_unk_token"): PreTrainedTokenizerBase._unk_token = None
     if not hasattr(PreTrainedTokenizerBase, "_pad_token"): PreTrainedTokenizerBase._pad_token = None
 except Exception:
     pass
+
+# Helpers supaya aman dipanggil kapan saja
+def _ENSURE_ST_ENCODER_OK(st_model):
+    try:
+        first_mod = getattr(st_model, "_first_module")() if hasattr(st_model, "_first_module") else None
+        core = None
+        if first_mod is not None:
+            core = getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None)
+        core = core or getattr(st_model, "auto_model", None) or getattr(st_model, "model", None)
+        if core is not None and hasattr(core, "config"):
+            _cfg_set_defaults(core.config)
+    except Exception:
+        pass
 
 def _ENSURE_PAD_TOKEN_FOR_ST_MODEL(st_model):
     try:
@@ -143,6 +130,7 @@ def _ENSURE_PAD_TOKEN_FOR_ST_MODEL(st_model):
                     setattr(tok, "_pad_token", "[PAD]")
                     try: tok.pad_token = "[PAD]"
                     except Exception: pass
+
         if getattr(tok, "pad_token_id", None) is None:
             try: tok.pad_token = tok.pad_token
             except Exception: pass
@@ -161,16 +149,12 @@ def _ENSURE_PAD_TOKEN_FOR_ST_MODEL(st_model):
             pass
     except Exception:
         pass
+# ==== END ULTRA-EARLY ====
 
-# Ekspos helper ke global (kalau perlu di-lookup saat unpickle)
-globals().update({
-    "_ENSURE_BERT_SDPA_FLAGS": _ENSURE_BERT_SDPA_FLAGS,
-    "_ENSURE_BERT_SDPA_FOR_ST": _ENSURE_BERT_SDPA_FOR_ST,
-    "_ENSURE_ST_ENCODER_OK": _ENSURE_ST_ENCODER_OK,
-    "_ENSURE_PAD_TOKEN_FOR_ST_MODEL": _ENSURE_PAD_TOKEN_FOR_ST_MODEL,
-    "_CFG_SET_DEFAULTS": _cfg_set_defaults,
-})
-# ==== END ULTRA-EARLY COMPAT ====
+
+globals()["_CFG_SET_DEFAULTS"] = _cfg_set_defaults        # <- kalau kamu memang mendefinisikan _cfg_set_defaults
+globals()["_ENSURE_ST_ENCODER_OK"] = _ENSURE_ST_ENCODER_OK
+globals()["_ENSURE_PAD_TOKEN_FOR_ST_MODEL"] = _ENSURE_PAD_TOKEN_FOR_ST_MODEL
 
 
 # ==== END ULTRA-EARLY HF CONFIG COMPAT ====
@@ -394,12 +378,12 @@ h1, h2, h3 { color: #5b21b6; } a, a:visited, a:hover { color: #111; }
 # =========================================
 # NAVIGATION (satu saja)
 # =========================================
-#page = st.sidebar.radio(
-    #"Navigation",
-    #options=["🏠 Home","📊 Dashboard","🧮 Prediction Request and Results"],
-    #index=1,
-   # label_visibility="collapsed",
-#)
+page = st.sidebar.radio(
+    "Navigation",
+    options=["🏠 Home","📊 Dashboard","🧮 Prediction Request and Results"],
+    index=1,
+    label_visibility="collapsed",
+)
 
 # Sebelumnya
 # pastikan ini ada lebih dulu (SETELAH df = load_data(...))
@@ -1067,7 +1051,66 @@ if pr_feature == "Sentiment":
             setattr(main_mod, "SBERTEncoder", SBERTEncoder)
     
     # ==== MODEL DOWNLOADER (boleh pakai punyamu yg sdh ada) ====
-
+    import re, hashlib, os
+    def _normalize_gdrive_url(url: str) -> str:
+        if not url:
+            return url
+        if "drive.google.com/uc?id=" in url:
+            return url
+        m = re.search(r"drive\.google\.com/file/d/([^/]+)/", url)
+        if m:
+            return f"https://drive.google.com/uc?id={m.group(1)}"
+        return url
+    
+    def _safe_filename_from_url(url: str, default_name: str = "sentiment_pipeline_sbert_linsvc.joblib") -> str:
+        h = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
+        base = default_name if default_name.endswith(".joblib") else (default_name + ".joblib")
+        return f"{h}_{base}"
+    
+    def _download_with_requests(url: str, dst_path: str):
+        import requests
+        with requests.get(url, stream=True, timeout=300) as r:
+            r.raise_for_status()
+            total = int(r.headers.get("content-length", 0)) or None
+            chunk = 1024 * 1024
+            prog = st.progress(0.0) if total else None
+            downloaded = 0
+            with open(dst_path, "wb") as f:
+                for b in r.iter_content(chunk_size=chunk):
+                    if not b:
+                        continue
+                    f.write(b)
+                    if total:
+                        downloaded += len(b)
+                        prog.progress(min(1.0, downloaded / total))
+            if prog:
+                prog.empty()
+    
+    def _download_model_once(model_url: str) -> str:
+        os.makedirs(repo_path("models"), exist_ok=True)
+        norm = _normalize_gdrive_url(model_url)
+        local_name = _safe_filename_from_url(norm)
+        local_path = repo_path("models", local_name)
+        if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+            return local_path
+        with st.spinner("⬇️ Downloading sentiment pipeline from MODEL_URL..."):
+            try:
+                import gdown
+                gdown.download(url=norm, output=local_path, quiet=False, fuzzy=True)
+            except Exception:
+                _download_with_requests(norm, local_path)
+        if not os.path.exists(local_path) or os.path.getsize(local_path) == 0:
+            raise FileNotFoundError("Gagal mengunduh pipeline dari MODEL_URL.")
+        return local_path
+    
+    @st.cache_resource(show_spinner=False)
+    def get_pipeline_local_path() -> str:
+        url = st.secrets.get("MODEL_URL") if hasattr(st, "secrets") else None
+        if not url:
+            url = os.environ.get("MODEL_URL", "").strip()
+        if not url:
+            raise RuntimeError("MODEL_URL tidak ditemukan di st.secrets atau ENV.")
+        return _download_model_once(url)
 
     
     def _post_load_fix(pipe):
@@ -3142,14 +3185,13 @@ else:
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        pr_date_range = st.date_input("Date Range", value=(_default_start, _today), key="pr_date_range")
+        pr_date_range = st.date_input("Date Range", value=(_default_start, _today))
     with c2:
-        pr_feature = st.radio("Feature Set", ["Sentiment", "Technical", "Sentiment + Technical"], horizontal=True, key="pr_feature")
+        pr_feature = st.radio("Feature Set", ["Sentiment", "Technical", "Sentiment + Technical"], horizontal=True)
     with c3:
-        pr_window = st.selectbox("Rolling Window (days)", WINDOWS, index=2, key="pr_window")
+        pr_window = st.selectbox("Rolling Window (days)", WINDOWS, index=2)
     with c4:
-        pr_ticker = st.selectbox("Select Ticker", TICKERS, index=0, key="pr_ticker")
-
+        pr_ticker = st.selectbox("Select Ticker", TICKERS, index=0)
 
     st.caption(
         f"Pilihan saat ini → Ticker: **{pr_ticker}**, Feature: **{pr_feature}**, "
