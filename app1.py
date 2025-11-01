@@ -652,7 +652,7 @@ page = st.sidebar.radio(
 # =========================================
 if page == "🏠 Home":
     st.title("🏠 Home")
-    st.subheader("Welcome!")
+    st.subheader("Welcome to StockSense!")
 
     st.markdown("""
     <style>
