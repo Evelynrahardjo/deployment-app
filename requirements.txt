@@ -9,6 +9,7 @@ sentence-transformers==2.7.0
 tokenizers==0.19.1
 huggingface_hub==0.23.5
 safetensors==0.4.3
+tokenizers==0.19.1
 
 # SciPy stack
 scikit-learn==1.4.2
