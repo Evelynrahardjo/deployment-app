@@ -185,87 +185,83 @@ def repo_path(*parts: str) -> str:
 # =========================================
 # THEME (sekali saja)
 # =========================================
-
 st.markdown("""
 <style>
-/* ====== Header ====== */
-header, [data-testid="stHeader"] {
-  background-color: #f6f0ff !important;
-  color: #000 !important;
-  border-bottom: 1px solid #e3d7ff;
+/* ====== INPUT FIELD — Bikin terang & terbaca ====== */
+
+/* TEXTAREA */
+.stTextArea textarea{
+  background: #ffffff !important;   /* terang */
+  color: #111 !important;           /* teks hitam */
+  caret-color: #111 !important;     /* kursor hitam */
+}
+.stTextArea textarea::placeholder{
+  color: #6b7280 !important;        /* abu gelap */
+  opacity: 1 !important;
+}
+/* container BaseWeb textarea (untuk border & radius) */
+div[data-baseweb="textarea"]{
+  background: #ffffff !important;
+  border: 1px solid #d3c4ff !important;   /* ungu muda */
+  border-radius: 12px !important;
+}
+div[data-baseweb="textarea"]:hover{
+  border-color: #bfa8ff !important;
+}
+div[data-baseweb="textarea"]:focus-within{
+  box-shadow: 0 0 0 3px rgba(91,33,182,.20) !important;
+  border-color: #a78bfa !important;
 }
 
-/* ====== Konten utama ====== */
-.stApp { background-color: #f6f0ff; color: #000000; }
-
-/* ====== Sidebar ====== */
-[data-testid="stSidebar"] {
-  background-color: #d9caff; color: #000; padding-top: .5rem;
+/* TEXT INPUT / NUMBER INPUT */
+div[data-baseweb="input"]{
+  background: #ffffff !important;
+  border: 1px solid #d3c4ff !important;
+  border-radius: 10px !important;
 }
-[data-testid="stSidebar"] [role="radiogroup"] > div > div:first-child { display: none !important; }
-[data-testid="stSidebar"] * { color: #000 !important; font-weight: 600; font-size: 17px; }
-[data-testid="stSidebar"] label:hover {
-  background-color: #e9e0ff !important; border-radius: 8px; transition: all .3s ease;
+div[data-baseweb="input"] input{
+  color: #111 !important;
+}
+div[data-baseweb="input"]:focus-within{
+  box-shadow: 0 0 0 3px rgba(91,33,182,.20) !important;
+  border-color: #a78bfa !important;
 }
 
-/* ====== Labels & Radio text ====== */
-label, .stRadio label p, .stDateInput label p, .stSelectbox label p { color:#111 !important; font-weight:600 !important; }
-.stRadio div[role="radio"] p { color:#111 !important; font-weight:600 !important; }
+/* DATE INPUT (field tanggal di dalam komponen) */
+.stDateInput input{
+  background: #ffffff !important;
+  color: #111 !important;
+}
 
-/* ====== Input/Select/TextInput ====== */
-/* field input tanggal + kotak pencarian select */
-.stDateInput input,
-.stSelectbox div[data-baseweb="select"] input { color:#111 !important; }
+/* SELECTBOX — nilai yang tampil & field search di dropdown */
+.stSelectbox div[data-baseweb="select"]{
+  background: #ffffff !important;
+  border: 1px solid #d3c4ff !important;
+  border-radius: 10px !important;
+}
+.stSelectbox div[data-baseweb="select"] input{    /* search field */
+  color: #111 !important;
+}
+.stSelectbox div[data-baseweb="select"] div[role="button"] div{  /* nilai terpilih */
+  color: #111 !important;
+}
+.stSelectbox div[role="listbox"] *{               /* item dropdown */
+  color: #111 !important;
+}
 
-/* nilai yang tampil di kotak select (bukan search) */
-.stSelectbox div[data-baseweb="select"] div[role="button"] div { color:#111 !important; }
+/* EXPANDER/ALERT/MARKDOWN/DATAFRAME — pastikan teks hitam */
+[data-testid="stExpander"], [data-testid="stExpander"] *,
+.stAlert, .stAlert *,
+[data-testid="stMarkdownContainer"],
+.stDataFrame, .stDataFrame *{
+  color: #111 !important;
+}
 
-/* semua BaseWeb input (TextInput/NumberInput) */
-div[data-baseweb="input"] input { color:#111 !important; }
-
-/* ====== Headings / Links ====== */
+/* Headings tetap sesuai tema */
 h1, h2, h3 { color:#5b21b6; }
-a, a:visited, a:hover { color:#111; }
-
-/* ====== Toggle sidebar ====== */
-button[aria-label="Toggle sidebar"], [data-testid="collapsedControl"], button[kind="header"]{
-  background-color:#f6f0ff !important; border:1px solid #d3c4ff !important;
-  border-radius:8px !important; box-shadow:0 0 4px rgba(0,0,0,.1) !important; opacity:1 !important;
-}
-button[aria-label="Toggle sidebar"] svg path,
-[data-testid="collapsedControl"] svg path,
-button[kind="header"] svg path { fill:#000 !important; stroke:#000 !important; opacity:1 !important; }
-button[aria-label="Toggle sidebar"]:hover,
-[data-testid="collapsedControl"]:hover,
-button[kind="header"] :hover {
-  background-color:#e9e0ff !important; border-color:#bfa8ff !important; transform:scale(1.05); transition:all .2s ease-in-out;
-}
-
-/* ===== Buttons ===== */
-.stButton > button{
-  color:#fff !important; background:#1f2937 !important; border:1px solid #bfa8ff !important;
-  border-radius:10px !important; font-weight:700 !important;
-}
-.stButton > button:hover{ background:#374151 !important; }
-.stButton > button:focus:not(:active){ box-shadow:0 0 0 3px rgba(91,33,182,.25) !important; }
-
-/* ===== TextArea ===== */
-.stTextArea textarea{ color:#111 !important; }
-.stTextArea textarea::placeholder{ color:#6b7280 !important; opacity:1 !important; }
-
-/* ===== Alerts / Expander / Markdown / Dataframe ===== */
-.stAlert, .stAlert * { color:#111 !important; font-weight:600 !important; }
-[data-testid="stExpander"], [data-testid="stExpander"] * { color:#111 !important; }
-[data-testid="stMarkdownContainer"] { color:#111 !important; }
-.stDataFrame, .stDataFrame * { color:#111 !important; }
-
-/* ===== Plotly axes tick/hover (umum) ===== */
-.js-plotly-plot, .plotly .hoverlayer { color:#111 !important; }
-
-/* ===== Container spacing ===== */
-.block-container { padding-top: 1.2rem; }
 </style>
 """, unsafe_allow_html=True)
+
 
 
 # =========================================
