@@ -1,10 +1,10 @@
-# Core stack (legacy-friendly)
+# Core
 torch==2.2.2
-transformers==4.39.3
-sentence-transformers==2.2.2
-tokenizers==0.15.2
-huggingface_hub==0.13.4     # <-- FIX PENTING
-safetensors==0.4.2          # aman untuk stack ini
+transformers==4.41.1
+sentence-transformers==2.7.0
+tokenizers==0.19.1
+huggingface_hub==0.36.0
+safetensors==0.4.2
 
 # SciPy stack
 numpy==1.26.4
