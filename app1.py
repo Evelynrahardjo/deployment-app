@@ -1067,66 +1067,7 @@ if pr_feature == "Sentiment":
             setattr(main_mod, "SBERTEncoder", SBERTEncoder)
     
     # ==== MODEL DOWNLOADER (boleh pakai punyamu yg sdh ada) ====
-    import re, hashlib, os
-    def _normalize_gdrive_url(url: str) -> str:
-        if not url:
-            return url
-        if "drive.google.com/uc?id=" in url:
-            return url
-        m = re.search(r"drive\.google\.com/file/d/([^/]+)/", url)
-        if m:
-            return f"https://drive.google.com/uc?id={m.group(1)}"
-        return url
-    
-    def _safe_filename_from_url(url: str, default_name: str = "sentiment_pipeline_sbert_linsvc.joblib") -> str:
-        h = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
-        base = default_name if default_name.endswith(".joblib") else (default_name + ".joblib")
-        return f"{h}_{base}"
-    
-    def _download_with_requests(url: str, dst_path: str):
-        import requests
-        with requests.get(url, stream=True, timeout=300) as r:
-            r.raise_for_status()
-            total = int(r.headers.get("content-length", 0)) or None
-            chunk = 1024 * 1024
-            prog = st.progress(0.0) if total else None
-            downloaded = 0
-            with open(dst_path, "wb") as f:
-                for b in r.iter_content(chunk_size=chunk):
-                    if not b:
-                        continue
-                    f.write(b)
-                    if total:
-                        downloaded += len(b)
-                        prog.progress(min(1.0, downloaded / total))
-            if prog:
-                prog.empty()
-    
-    def _download_model_once(model_url: str) -> str:
-        os.makedirs(repo_path("models"), exist_ok=True)
-        norm = _normalize_gdrive_url(model_url)
-        local_name = _safe_filename_from_url(norm)
-        local_path = repo_path("models", local_name)
-        if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
-            return local_path
-        with st.spinner("⬇️ Downloading sentiment pipeline from MODEL_URL..."):
-            try:
-                import gdown
-                gdown.download(url=norm, output=local_path, quiet=False, fuzzy=True)
-            except Exception:
-                _download_with_requests(norm, local_path)
-        if not os.path.exists(local_path) or os.path.getsize(local_path) == 0:
-            raise FileNotFoundError("Gagal mengunduh pipeline dari MODEL_URL.")
-        return local_path
-    
-    @st.cache_resource(show_spinner=False)
-    def get_pipeline_local_path() -> str:
-        url = st.secrets.get("MODEL_URL") if hasattr(st, "secrets") else None
-        if not url:
-            url = os.environ.get("MODEL_URL", "").strip()
-        if not url:
-            raise RuntimeError("MODEL_URL tidak ditemukan di st.secrets atau ENV.")
-        return _download_model_once(url)
+
 
     
     def _post_load_fix(pipe):
