@@ -122,6 +122,74 @@ except Exception:
     util_mod.semantic_search = lambda *a, **k: None
     sys.modules["sentence_transformers.util"] = util_mod
 
+# ==== CORE UTILITIES (DEFINE ONCE; dipakai di semua halaman) ====
+@st.cache_resource(show_spinner=False)
+def _get_translator():
+    try:
+        from googletrans import Translator  # sudah ada di requirements
+        return Translator()
+    except Exception:
+        return None
+
+def safe_translate_to_en(text: str) -> str:
+    tr = _get_translator()
+    if tr is None:
+        return text
+    try:
+        return tr.translate(text, dest="en").text
+    except Exception:
+        return text
+
+# ---- (opsional tapi disarankan) helper SBERT + loader pipeline satu kali ----
+from sklearn.base import BaseEstimator, TransformerMixin
+try:
+    from sentence_transformers import SentenceTransformer
+except Exception:
+    SentenceTransformer = None
+
+class SBERTEncoder(BaseEstimator, TransformerMixin):
+    def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                 batch_size=64, normalize_embeddings=True, device=None):
+        if SentenceTransformer is None:
+            raise ImportError("Missing sentence-transformers. Install: pip install -q sentence-transformers")
+        self.model_name = model_name
+        self.batch_size = batch_size
+        self.normalize_embeddings = normalize_embeddings
+        self.device = device
+        self._encoder = SentenceTransformer(self.model_name, device=self.device)
+    def fit(self, X, y=None): return self
+    def transform(self, X):
+        texts = pd.Series(X).astype(str).tolist()
+        return self._encoder.encode(texts, batch_size=self.batch_size, show_progress_bar=False,
+                                    convert_to_numpy=True, normalize_embeddings=self.normalize_embeddings)
+
+@st.cache_resource(show_spinner=True)
+def load_pipeline(path_joblib: str):
+    import joblib, pickle, io
+    if not os.path.exists(path_joblib):
+        raise FileNotFoundError(f"File pipeline tidak ditemukan: {path_joblib}")
+    with open(path_joblib, "rb") as _f:
+        head = _f.read(200)
+    if b"version https://git-lfs.github.com/spec/v1" in head:
+        raise RuntimeError("File model adalah POINTER Git LFS (bukan artefak biner).")
+    try:
+        return joblib.load(path_joblib)
+    except Exception:
+        try:
+            return joblib.load(path_joblib, mmap_mode="r")
+        except Exception:
+            with open(path_joblib, "rb") as f:
+                return pickle.load(io.BytesIO(f.read()), encoding="latin1")
+
+def predict_sentiment(pipe, txt: str):
+    pred = pipe.predict([txt])[0]
+    try:
+        margins = pipe.decision_function([txt])
+        score = float(np.max(margins if getattr(margins, "ndim", 1) == 1 else margins[0]))
+    except Exception:
+        score = None
+    return pred, score
+
 
 
 # =========================================
@@ -631,22 +699,20 @@ if pr_feature == "Sentiment":
     # PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
 
     # Pastikan file beneran biner (bukan pointer) – dan/atau unduh dari MODEL_URL kalau perlu
+# ... di dalam if pr_feature == "Sentiment":
     if run_predict_btn:
         if not user_text.strip():
             st.warning("Masukkan berita terlebih dahulu ya.")
         else:
             text_input = user_text.strip()
             text_for_model = safe_translate_to_en(text_input) if translate_opt else text_input
-    
             PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
-            ensure_model_file(PATH_PIPELINE)  # cek ada & bukan pointer
-    
+            ensure_model_file(PATH_PIPELINE)
             with st.spinner("🔧 Loading pipeline & running inference..."):
-                pipe = load_pipeline(PATH_PIPELINE)      # fungsi sudah didefinisikan di atas
+                pipe = load_pipeline(PATH_PIPELINE)
                 y_pred, score = predict_sentiment(pipe, text_for_model)
-            # ... lanjut normalisasi label & tampilkan hasil
-
-
+    
+    # (hapus seluruh definisi ganda: SBERTEncoder, _get_translator, safe_translate_to_en, load_pipeline, predict_sentiment)
 
 
     from sklearn.base import BaseEstimator, TransformerMixin
