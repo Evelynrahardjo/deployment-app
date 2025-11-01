@@ -7,7 +7,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import sys, types
 
 # Plotly
 import plotly.express as px
@@ -587,49 +586,25 @@ if pr_feature == "Sentiment":
         except Exception:
             return text
 
-    # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
-    # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
-  # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
+    @st.cache_resource(show_spinner=True)
+    def load_pipeline(path_joblib: str):
+        import joblib
+        if not os.path.exists(path_joblib):
+            raise FileNotFoundError(
+                f"File pipeline tidak ditemukan: {path_joblib}. "
+                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
+            )
+        pipe = joblib.load(path_joblib)
+        return pipe
 
-# ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
-try:
-    import sentence_transformers.model_card  # ✅ kalau modulnya ada, lanjut normal
-except Exception:
-    mc = types.ModuleType("sentence_transformers.model_card")
-    class ModelCard:
-        def __init__(self, **kwargs):
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-    class SentenceTransformerModelCard(ModelCard):
-        pass
-    mc.ModelCard = ModelCard
-    mc.SentenceTransformerModelCard = SentenceTransformerModelCard
-    sys.modules["sentence_transformers.model_card"] = mc
-# ==== END PATCH ====
-
-
-@st.cache_resource(show_spinner=True)
-def load_pipeline(path_joblib: str):
-    import joblib
-    if not os.path.exists(path_joblib):
-        raise FileNotFoundError(
-            f"File pipeline tidak ditemukan: {path_joblib}. "
-            "Pastikan telah menyimpan/unggah 'sentiment_pipeline_sbert_linsvc.joblib'."
-        )
-    pipe = joblib.load(path_joblib)
-    return pipe
-
-
-
-ct_sentiment(pipe, txt: str):
-    pred = pipe.predict([txt])[0]
-    try:
-        margins = pipe.decision_function([txt])
-        score = float(np.max(margins if getattr(margins, "ndim", 1) == 1 else margins[0]))
-    except Exception:
-        score = None
-    return pred, score
-
+    def predict_sentiment(pipe, txt: str):
+        pred = pipe.predict([txt])[0]
+        try:
+            margins = pipe.decision_function([txt])
+            score = float(np.max(margins if getattr(margins, "ndim", 1) == 1 else margins[0]))
+        except Exception:
+            score = None
+        return pred, score
 
     if run_predict_btn:
         if not user_text.strip():
@@ -1547,78 +1522,57 @@ elif pr_feature == "Sentiment + Technical":
         except Exception:
             return text
 
-    # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
-    # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
+    @st.cache_resource(show_spinner=True)
+    def load_pipeline(path_joblib: str):
+        import joblib
+        if not os.path.exists(path_joblib):
+            raise FileNotFoundError(
+                f"File pipeline tidak ditemukan: {path_joblib}. "
+                "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
+            )
+        pipe = joblib.load(path_joblib)
+        return pipe
 
-# ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
-try:
-    import sentence_transformers.model_card  # ✅ kalau modulnya ada, lanjut normal
-except Exception:
-    mc = types.ModuleType("sentence_transformers.model_card")
-    class ModelCard:
-        def __init__(self, **kwargs):
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-    class SentenceTransformerModelCard(ModelCard):
-        pass
-    mc.ModelCard = ModelCard
-    mc.SentenceTransformerModelCard = SentenceTransformerModelCard
-    sys.modules["sentence_transformers.model_card"] = mc
-# ==== END PATCH ====
-
-@st.cache_resource(show_spinner=True)
-def load_pipeline(path_joblib: str):
-    import joblib
-    if not os.path.exists(path_joblib):
-        raise FileNotFoundError(
-            f"File pipeline tidak ditemukan: {path_joblib}. "
-            "Pastikan telah menyimpan/unggah 'sentiment_pipeline_sbert_linsvc.joblib'."
-        )
-    pipe = joblib.load(path_joblib)
-    return pipe
-
-# ← tidak terindent; berdiri sendiri, di luar load_pipeline
-def predict_sentiment(pipe, txt: str):
-    pred = pipe.predict([txt])[0]
-    try:
-        margins = pipe.decision_function([txt])
-        score = float(np.max(margins if getattr(margins, "ndim", 1) == 1 else margins[0]))
-    except Exception:
-        score = None
-    return pred, score
-
-# ← pastikan TIDAK terindent (kolom paling kiri)
-if run_predict_btn:
-    if not user_text.strip():
-        st.warning("Masukkan berita terlebih dahulu ya.")
-    else:
+    def predict_sentiment(pipe, txt: str):
+        pred = pipe.predict([txt])[0]
         try:
-            text_input = user_text.strip()
-            text_for_model = safe_translate_to_en(text_input) if translate_opt else text_input
-            with st.spinner("🔧 Loading pipeline & running inference..."):
-                pipe = load_pipeline(PATH_PIPELINE)
-                y_pred, score = predict_sentiment(pipe, text_for_model)
-            lower = str(y_pred).strip().lower()
-            if   lower in {"positive","pos"}:  pred_norm = "Positive"
-            elif lower in {"negative","neg"}:  pred_norm = "Negative"
-            elif lower in {"neutral","neu","netral"}: pred_norm = "Neutral"
-            else: pred_norm = str(y_pred).strip().capitalize()
+            margins = pipe.decision_function([txt])
+            score = float(np.max(margins if getattr(margins, "ndim", 1) == 1 else margins[0]))
+        except Exception:
+            score = None
+        return pred, score
 
-            st.markdown("### Results: Sentiment **Positive / Negative / Neutral**")
-            if   pred_norm == "Positive": st.success("🟢 **Positive** — berita bernada positif.")
-            elif pred_norm == "Negative": st.error("🔴 **Negative** — berita bernada negatif.")
-            elif pred_norm == "Neutral":  st.info("⚪ **Neutral** — berita bernada netral.")
-            else: st.warning(f"Hasil tidak teridentifikasi: `{y_pred}`")
+    if run_predict_btn:
+        if not user_text.strip():
+            st.warning("Masukkan berita terlebih dahulu ya.")
+        else:
+            try:
+                text_input = user_text.strip()
+                text_for_model = safe_translate_to_en(text_input) if translate_opt else text_input
+                with st.spinner("🔧 Loading pipeline & running inference..."):
+                    pipe = load_pipeline(PATH_PIPELINE)
+                    y_pred, score = predict_sentiment(pipe, text_for_model)
+                lower = str(y_pred).strip().lower()
+                if   lower in {"positive","pos"}:  pred_norm = "Positive"
+                elif lower in {"negative","neg"}:  pred_norm = "Negative"
+                elif lower in {"neutral","neu","netral"}: pred_norm = "Neutral"
+                else: pred_norm = str(y_pred).strip().capitalize()
 
-            with st.expander("Preview (English translation) & Model Info"):
-                st.write(text_for_model)
-                if score is not None: st.caption(f"Margin score: `{score:.4f}`")
-                st.caption("Pipeline: SBERTEncoder → (ROS saat training) → LinearSVC")
-            st.session_state["last_pred_label"] = pred_norm
-            st.session_state["last_pred_score"] = score
-        except Exception as e:
-            st.error("Terjadi error saat prediksi.")
-            st.exception(e)
+                st.markdown("### Results: Sentiment **Positive / Negative / Neutral**")
+                if   pred_norm == "Positive": st.success("🟢 **Positive** — berita bernada positif.")
+                elif pred_norm == "Negative": st.error("🔴 **Negative** — berita bernada negatif.")
+                elif pred_norm == "Neutral":  st.info("⚪ **Neutral** — berita bernada netral.")
+                else: st.warning(f"Hasil tidak teridentifikasi: `{y_pred}`")
+
+                with st.expander("Preview (English translation) & Model Info"):
+                    st.write(text_for_model)
+                    if score is not None: st.caption(f"Margin score: `{score:.4f}`")
+                    st.caption("Pipeline: SBERTEncoder → (ROS saat training) → LinearSVC")
+                st.session_state["last_pred_label"] = pred_norm
+                st.session_state["last_pred_score"] = score
+            except Exception as e:
+                st.error("Terjadi error saat prediksi.")
+                st.exception(e)
 
     # ---------------------------
     # 2) Daily sentiment logger
