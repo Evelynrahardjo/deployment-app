@@ -593,13 +593,48 @@ if pr_feature == "Sentiment":
 
     PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
 
+    # --- Helper WAJIB (baru): pastikan pad_token & pad_token_id sinkron ---
+    def _force_pad_token_for_sbert(encoder):
+        """
+        Pastikan tokenizer & model di SentenceTransformer 'encoder'
+        punya pad_token & pad_token_id. Kalau perlu, tambahkan [PAD]
+        dan resize embedding; juga sinkronkan ke config/generation_config.
+        """
+        try:
+            tok = encoder.tokenizer
+            first = encoder._first_module()           # sentence_transformers.models.Transformer
+            auto_model = getattr(first, "auto_model", None)
+            cfg = getattr(auto_model, "config", None)
+    
+            # 1) pastikan pad_token ada
+            if getattr(tok, "pad_token", None) is None:
+                if getattr(tok, "eos_token", None):
+                    tok.pad_token = tok.eos_token
+                elif getattr(tok, "sep_token", None):
+                    tok.pad_token = tok.sep_token
+                else:
+                    tok.add_special_tokens({"pad_token": "[PAD]"})
+                    if auto_model is not None:
+                        auto_model.resize_token_embeddings(len(tok))
+    
+            # 2) pastikan pad_token_id ada
+            if getattr(tok, "pad_token_id", None) is None:
+                tok.pad_token_id = tok.convert_tokens_to_ids(tok.pad_token)
+    
+            # 3) sinkron ke config model
+            if cfg is not None and getattr(cfg, "pad_token_id", None) is None:
+                cfg.pad_token_id = tok.pad_token_id
+    
+            # 4) sinkron ke generation_config (kalau ada)
+            gen_cfg = getattr(auto_model, "generation_config", None)
+            if gen_cfg is not None and getattr(gen_cfg, "pad_token_id", None) is None:
+                gen_cfg.pad_token_id = tok.pad_token_id
+    
+        except Exception:
+            # jangan matikan app; kalau gagal masih ketangkap di _ensure_pad_runtime()
+            pass
 
-    from sklearn.base import BaseEstimator, TransformerMixin
-    try:
-        from sentence_transformers import SentenceTransformer
-    except Exception as e:
-        SentenceTransformer = None  # biar app tetap jalan kalau lib belum ada
-
+    # --- SBERTEncoder (baru) ---
     from sklearn.base import BaseEstimator, TransformerMixin
     try:
         from sentence_transformers import SentenceTransformer
@@ -620,27 +655,21 @@ if pr_feature == "Sentiment":
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
     
-            # === FIX: pastikan tokenizer punya pad_token ===
-            try:
-                tok = self._encoder.tokenizer
-                if getattr(tok, "pad_token", None) is None:
-                    if getattr(tok, "eos_token", None):
-                        tok.pad_token = tok.eos_token
-                    elif getattr(tok, "sep_token", None):
-                        tok.pad_token = tok.sep_token
-                    else:
-                        tok.add_special_tokens({"pad_token": "[PAD]"})
-                        first = self._encoder._first_module()  # sentence_transformers.models.Transformer
-                        if hasattr(first, "auto_model"):
-                            first.auto_model.resize_token_embeddings(len(tok))
-            except Exception:
-                # Jangan matikan app kalau patch gagal; biar ketangkap saat transform()
-                pass
+            # ⛑️ patch awal
+            _force_pad_token_for_sbert(self._encoder)
     
         def fit(self, X, y=None):
             return self
     
+        def _ensure_pad_runtime(self):
+            # dipanggil setiap sebelum encode (double safety)
+            _force_pad_token_for_sbert(self._encoder)
+            tok = self._encoder.tokenizer
+            if getattr(tok, "pad_token", None) is None or getattr(tok, "pad_token_id", None) is None:
+                raise RuntimeError("Tokenizer masih belum punya pad_token/pad_token_id setelah patch.")
+    
         def transform(self, X):
+            self._ensure_pad_runtime()
             texts = pd.Series(X).astype(str).tolist()
             embs = self._encoder.encode(
                 texts,
@@ -650,7 +679,6 @@ if pr_feature == "Sentiment":
                 normalize_embeddings=self.normalize_embeddings,
             )
             return embs
-
 
     @st.cache_resource(show_spinner=False)
     def _get_translator():
@@ -1559,13 +1587,49 @@ elif pr_feature == "Sentiment + Technical":
     # PATH_PIPELINE = "/content/sentiment_pipeline_sbert_linsvc.joblib"
     PATH_PIPELINE = repo_path("sentiment_pipeline_sbert_linsvc.joblib")
 
-    # SBERT encoder (agar pipeline joblib yang berisi SBERTEncoder bisa dikenali)
-    from sklearn.base import BaseEstimator, TransformerMixin
-    try:
-        from sentence_transformers import SentenceTransformer
-    except Exception:
-        SentenceTransformer = None
+    # --- Helper WAJIB (baru): pastikan pad_token & pad_token_id sinkron ---
+    def _force_pad_token_for_sbert(encoder):
+        """
+        Pastikan tokenizer & model di SentenceTransformer 'encoder'
+        punya pad_token & pad_token_id. Kalau perlu, tambahkan [PAD]
+        dan resize embedding; juga sinkronkan ke config/generation_config.
+        """
+        try:
+            tok = encoder.tokenizer
+            first = encoder._first_module()           # sentence_transformers.models.Transformer
+            auto_model = getattr(first, "auto_model", None)
+            cfg = getattr(auto_model, "config", None)
+    
+            # 1) pastikan pad_token ada
+            if getattr(tok, "pad_token", None) is None:
+                if getattr(tok, "eos_token", None):
+                    tok.pad_token = tok.eos_token
+                elif getattr(tok, "sep_token", None):
+                    tok.pad_token = tok.sep_token
+                else:
+                    tok.add_special_tokens({"pad_token": "[PAD]"})
+                    if auto_model is not None:
+                        auto_model.resize_token_embeddings(len(tok))
+    
+            # 2) pastikan pad_token_id ada
+            if getattr(tok, "pad_token_id", None) is None:
+                tok.pad_token_id = tok.convert_tokens_to_ids(tok.pad_token)
+    
+            # 3) sinkron ke config model
+            if cfg is not None and getattr(cfg, "pad_token_id", None) is None:
+                cfg.pad_token_id = tok.pad_token_id
+    
+            # 4) sinkron ke generation_config (kalau ada)
+            gen_cfg = getattr(auto_model, "generation_config", None)
+            if gen_cfg is not None and getattr(gen_cfg, "pad_token_id", None) is None:
+                gen_cfg.pad_token_id = tok.pad_token_id
+    
+        except Exception:
+            # jangan matikan app; kalau gagal masih ketangkap di _ensure_pad_runtime()
+            pass
 
+
+        # --- SBERTEncoder (baru) ---
     from sklearn.base import BaseEstimator, TransformerMixin
     try:
         from sentence_transformers import SentenceTransformer
@@ -1586,27 +1650,21 @@ elif pr_feature == "Sentiment + Technical":
             self.device = device
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
     
-            # === FIX: pastikan tokenizer punya pad_token ===
-            try:
-                tok = self._encoder.tokenizer
-                if getattr(tok, "pad_token", None) is None:
-                    if getattr(tok, "eos_token", None):
-                        tok.pad_token = tok.eos_token
-                    elif getattr(tok, "sep_token", None):
-                        tok.pad_token = tok.sep_token
-                    else:
-                        tok.add_special_tokens({"pad_token": "[PAD]"})
-                        first = self._encoder._first_module()  # sentence_transformers.models.Transformer
-                        if hasattr(first, "auto_model"):
-                            first.auto_model.resize_token_embeddings(len(tok))
-            except Exception:
-                # Jangan matikan app kalau patch gagal; biar ketangkap saat transform()
-                pass
+            # ⛑️ patch awal
+            _force_pad_token_for_sbert(self._encoder)
     
         def fit(self, X, y=None):
             return self
     
+        def _ensure_pad_runtime(self):
+            # dipanggil setiap sebelum encode (double safety)
+            _force_pad_token_for_sbert(self._encoder)
+            tok = self._encoder.tokenizer
+            if getattr(tok, "pad_token", None) is None or getattr(tok, "pad_token_id", None) is None:
+                raise RuntimeError("Tokenizer masih belum punya pad_token/pad_token_id setelah patch.")
+    
         def transform(self, X):
+            self._ensure_pad_runtime()
             texts = pd.Series(X).astype(str).tolist()
             embs = self._encoder.encode(
                 texts,
