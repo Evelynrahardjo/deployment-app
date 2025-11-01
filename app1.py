@@ -394,12 +394,12 @@ h1, h2, h3 { color: #5b21b6; } a, a:visited, a:hover { color: #111; }
 # =========================================
 # NAVIGATION (satu saja)
 # =========================================
-page = st.sidebar.radio(
-    "Navigation",
-    options=["🏠 Home","📊 Dashboard","🧮 Prediction Request and Results"],
-    index=1,
-    label_visibility="collapsed",
-)
+#page = st.sidebar.radio(
+    #"Navigation",
+    #options=["🏠 Home","📊 Dashboard","🧮 Prediction Request and Results"],
+    #index=1,
+   # label_visibility="collapsed",
+#)
 
 # Sebelumnya
 # pastikan ini ada lebih dulu (SETELAH df = load_data(...))
@@ -3142,13 +3142,14 @@ else:
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        pr_date_range = st.date_input("Date Range", value=(_default_start, _today))
+        pr_date_range = st.date_input("Date Range", value=(_default_start, _today), key="pr_date_range")
     with c2:
-        pr_feature = st.radio("Feature Set", ["Sentiment", "Technical", "Sentiment + Technical"], horizontal=True)
+        pr_feature = st.radio("Feature Set", ["Sentiment", "Technical", "Sentiment + Technical"], horizontal=True, key="pr_feature")
     with c3:
-        pr_window = st.selectbox("Rolling Window (days)", WINDOWS, index=2)
+        pr_window = st.selectbox("Rolling Window (days)", WINDOWS, index=2, key="pr_window")
     with c4:
-        pr_ticker = st.selectbox("Select Ticker", TICKERS, index=0)
+        pr_ticker = st.selectbox("Select Ticker", TICKERS, index=0, key="pr_ticker")
+
 
     st.caption(
         f"Pilihan saat ini → Ticker: **{pr_ticker}**, Feature: **{pr_feature}**, "
