@@ -783,37 +783,50 @@ else:
     
     # 2) Date range terkunci (end = start + W - 1, max = hari ini)
     #    - Simpan di session_state supaya stabil saat window berubah
+    # 2) Date range terkunci (end = start + W - 1, max = hari ini)
     def _init_default_range():
         end0 = _today
         start0 = max(end0 - timedelta(days=W-1), _today - timedelta(days=180))
-        return (start0, end0)
+        return (end0 if isinstance(start0, tuple) else start0, end0)
     
     if "pr_date_range" not in st.session_state:
         st.session_state.pr_date_range = _init_default_range()
     
-    def _snap_range_to_window():
-        s, e = st.session_state.pr_date_range
-        # normalisasi bila user memilih terbalik
+    def _as_date(d):
+        # jaga-jaga jika datangnya datetime
+        return getattr(d, "date", lambda: d)() if d is not None else d
+    
+    def _normalize_to_window(val, W):
+        """Terima single-date atau (start, end) -> kembalikan (start, end) yang terkunci W hari."""
+        if isinstance(val, tuple) and len(val) == 2:
+            s, e = val
+        else:
+            # State lama: single-date
+            s = val
+            e = None
+        s = _as_date(s)
+        e = _as_date(e) if e else None
+        if e is None:
+            e = min(s + timedelta(days=W-1), _today)
         if s > e:
             s, e = e, s
-        # kunci panjang = W hari (inklusif)
-        target_end = min(s + timedelta(days=W-1), _today)
-        st.session_state.pr_date_range = (s, target_end)
+        # lock panjang W (inklusif)
+        e = min(s + timedelta(days=W-1), _today)
+        return (s, e)
     
-    # 3) Widget date range (start–end), lalu "snap" ke W
     with c1:
-        pr_start, pr_end = st.date_input(
+        # Pakai key baru agar tidak tabrakan dengan state lama
+        raw = st.date_input(
             "Date Range (locked to window)",
-            value=st.session_state.pr_date_range,
-            key="pr_date_range",
+            value=tuple(st.session_state.pr_date_range),
+            key="pr_date_range_v2",
         )
     
-    # Paksa panjang sesuai W (mis. W=5 → end = start+4)
-    if (st.session_state.pr_date_range[1] - st.session_state.pr_date_range[0]).days != (W-1):
-        _snap_range_to_window()
-    
-    # Baca kembali nilai yang sudah “disnap”
+    # Raw bisa single atau tuple → normalkan selalu jadi (start, end)
+    st.session_state.pr_date_range = _normalize_to_window(raw, W)
     pr_start, pr_end = st.session_state.pr_date_range
+
+    
     
     # 4) Lainnya tetap sama
     with c2:
