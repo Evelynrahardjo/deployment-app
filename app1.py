@@ -185,23 +185,64 @@ def repo_path(*parts: str) -> str:
 # =========================================
 # THEME (sekali saja)
 # =========================================
+
 st.markdown("""
 <style>
+/* ====== Header ====== */
 header, [data-testid="stHeader"] {
     background-color: #f6f0ff !important;
     color: #000 !important;
     border-bottom: 1px solid #e3d7ff;
 }
+
+/* ====== Konten utama ====== */
 .stApp { background-color: #f6f0ff; color: #000000; }
-[data-testid="stSidebar"] { background-color: #d9caff; color: #000; padding-top: .5rem; }
+
+/* ====== Sidebar ====== */
+[data-testid="stSidebar"] {
+    background-color: #d9caff; color: #000; padding-top: 0.5rem;
+}
 [data-testid="stSidebar"] [role="radiogroup"] > div > div:first-child { display: none !important; }
 [data-testid="stSidebar"] * { color: #000 !important; font-weight: 600; font-size: 17px; }
-[data-testid="stSidebar"] label:hover { background-color: #e9e0ff !important; border-radius: 8px; transition: .3s; }
+[data-testid="stSidebar"] label:hover { background-color: #e9e0ff !important; border-radius: 8px; transition: all 0.3s ease; }
+
+/* ====== FORM LABELS ====== */
+label, .stRadio label p, .stDateInput label p, .stSelectbox label p { color: #000 !important; font-weight: 600 !important; }
+
+/* ====== RADIO TEXT ====== */
+.stRadio div[role="radio"] p { color: #000 !important; font-weight: 600 !important; }
+
+/* ====== INPUT TEXT ====== */
+.stDateInput input, .stSelectbox div[data-baseweb="select"] input { color: white !important; }
+
+/* Headings/links */
 h1, h2, h3 { color: #5b21b6; } a, a:visited, a:hover { color: #111; }
+
+/* ====== Toggle sidebar ====== */
+button[aria-label="Toggle sidebar"], [data-testid="collapsedControl"], button[kind="header"]{
+    background-color: #f6f0ff !important; border: 1px solid #d3c4ff !important;
+    border-radius: 8px !important; box-shadow: 0 0 4px rgba(0,0,0,0.1) !important; opacity: 1 !important;
+}
+button[aria-label="Toggle sidebar"] svg path, [data-testid="collapsedControl"] svg path, button[kind="header"] svg path {
+    fill: #000000 !important; stroke: #000000 !important; opacity: 1 !important;
+}
+button[aria-label="Toggle sidebar"]:hover, [data-testid="collapsedControl"]:hover, button[kind="header"]:hover {
+    background-color: #e9e0ff !important; border-color: #bfa8ff !important; transform: scale(1.05);
+    transition: all 0.2s ease-in-out;
+}
+
+/* ===== Buttons ===== */
 .stButton > button{ color:#fff !important; background:#1f2937 !important; border:1px solid #bfa8ff !important; border-radius:10px !important; font-weight:700 !important; }
 .stButton > button:hover{ background:#374151 !important; }
+.stButton > button:focus:not(:active){ box-shadow:0 0 0 3px rgba(91,33,182,.25) !important; }
+
+/* TextArea */
 .stTextArea textarea{ color:#ffffff !important; }
+.stTextArea textarea::placeholder{ color:#e5e7eb !important; opacity:1 !important; }
+
+/* Alerts */
 .stAlert { color:#000 !important; font-weight:600 !important; }
+
 .block-container { padding-top: 1.2rem; }
 </style>
 """, unsafe_allow_html=True)
