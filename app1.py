@@ -216,7 +216,8 @@ label, .stRadio label p, .stDateInput label p, .stSelectbox label p { color: #00
 .stDateInput input, .stSelectbox div[data-baseweb="select"] input { color: white !important; }
 
 /* Headings/links */
-h1, h2, h3 { color: #5b21b6; } a, a:visited, a:hover { color: #111; }
+h1, h2, h3 { color: #5b21b6; } 
+a, a:visited, a:hover { color: #111; }
 
 /* ====== Toggle sidebar ====== */
 button[aria-label="Toggle sidebar"], [data-testid="collapsedControl"], button[kind="header"]{
@@ -232,16 +233,39 @@ button[aria-label="Toggle sidebar"]:hover, [data-testid="collapsedControl"]:hove
 }
 
 /* ===== Buttons ===== */
-.stButton > button{ color:#fff !important; background:#1f2937 !important; border:1px solid #bfa8ff !important; border-radius:10px !important; font-weight:700 !important; }
+.stButton > button{
+    color:#fff !important; background:#1f2937 !important; border:1px solid #bfa8ff !important; 
+    border-radius:10px !important; font-weight:700 !important;
+}
 .stButton > button:hover{ background:#374151 !important; }
 .stButton > button:focus:not(:active){ box-shadow:0 0 0 3px rgba(91,33,182,.25) !important; }
 
-/* TextArea */
+/* ===== TextArea ===== */
 .stTextArea textarea{ color:#ffffff !important; }
 .stTextArea textarea::placeholder{ color:#e5e7eb !important; opacity:1 !important; }
 
-/* Alerts */
-.stAlert { color:#000 !important; font-weight:600 !important; }
+/* ===== Alerts (success/info/warning/error) — DARK with WHITE text ===== */
+.stAlert{
+    background:#111827 !important;             /* dark slate */
+    color:#ffffff !important;                   /* ✅ putih */
+    border:1px solid #bfa8ff !important;        /* ungu muda */
+    border-radius:12px !important;
+    font-weight:600 !important;
+}
+.stAlert *{ color:#ffffff !important; }         /* pastikan semua konten putih */
+.stAlert a{ text-decoration: underline; }
+.stAlert [data-testid="stIcon"] svg{ fill:#bfa8ff !important; }  /* ikon ungu */
+
+/* Caption kecil agar tidak balik ke hitam */
+[data-testid="stCaptionContainer"] *{ color:#e5e7eb !important; }
+
+/* Code/label kecil di dalam alert */
+.stAlert code, .stAlert kbd{
+    background: rgba(191,168,255,.15) !important;
+    color:#fff !important; 
+    border-radius:6px !important; 
+    padding:0 .25rem !important;
+}
 
 .block-container { padding-top: 1.2rem; }
 </style>
