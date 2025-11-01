@@ -763,25 +763,34 @@ else:
 
     # ---- Controls (KEY UNIK 'pr_*')
     TICKERS = ["BBCA.JK", "BMRI.JK", "BBRI.JK", "BDMN.JK"]
-    WINDOWS = [1, 3, 5, 7, 14]
-    _today = datetime.today().date()
-    _default_start = _today - timedelta(days=180)
-
+    WINDOWS  = [1, 3, 5, 7, 14]
+    _today   = datetime.today().date()
+    
     c1, c2, c3, c4 = st.columns(4)
+    with c3:
+        pr_window = st.selectbox("Rolling Window (days)", WINDOWS, index=2, key="pr_window")
+        W = int(pr_window)
+    
     with c1:
-        pr_date_range = st.date_input("Date Range", value=(_default_start, _today), key="pr_date_range")
+        # Pilih hanya start date; end date di-set otomatis = start + (W - 1)
+        # Defaultnya mundur W-1 hari dari hari ini
+        _default_start = max(_today - timedelta(days=W-1), _today - timedelta(days=180))
+        pr_start = st.date_input("Start Date (auto window)", value=_default_start, key="pr_start_date")
+    
+    # End date otomatis sesuai window
+    pr_end = min(pr_start + timedelta(days=W - 1), _today)
+    
     with c2:
         pr_feature = st.radio("Feature Set", ["Sentiment", "Technical", "Sentiment + Technical"],
                               horizontal=True, key="pr_feature")
-    with c3:
-        pr_window = st.selectbox("Rolling Window (days)", WINDOWS, index=2, key="pr_window")
     with c4:
         pr_ticker = st.selectbox("Select Ticker", TICKERS, index=0, key="pr_ticker")
-
+    
     st.caption(
         f"Pilihan saat ini → Ticker: **{pr_ticker}**, Feature: **{pr_feature}**, "
-        f"Window: **{pr_window}**, Date: **{pr_date_range[0]} – {pr_date_range[1]}**"
+        f"Window: **{W}**, Date: **{pr_start} – {pr_end}** (otomatis {W} hari)"
     )
+
     st.write("---")
 
     # ---- Scrape & extend (opsional)
@@ -1028,22 +1037,10 @@ else:
         st.write("---")
         st.subheader("🗓️ Assign Sentiment to Dates")
 
-        global_min, global_max = pr_date_range[0], pr_date_range[1]
+        # Gunakan window utama dari Controls
         W = int(pr_window)
-
-        def _build_empty_table(d0, d1):
-            dates = pd.date_range(pd.to_datetime(d0), pd.to_datetime(d1), freq="D")
-            return pd.DataFrame({
-                "Date": dates.date,
-                "Sentiment Positive": 0,
-                "Sentiment Negative": 0,
-                "Sentiment Neutral":  0,
-            })
-
-        default_start = max(global_min, global_max - timedelta(days=W-1))
-        win_start = st.date_input("Start date for sentiment window", value=default_start,
-                                  min_value=global_min, max_value=global_max, key="sent_win_start")
-        win_end = min(global_max, win_start + timedelta(days=W-1))
+        win_start = pr_start
+        win_end   = pr_end
         st.caption(f"Window aktif: **{W} hari** → rentang: **{win_start} s/d {win_end}**")
 
         if "senti_table_range" not in st.session_state:
@@ -1125,8 +1122,9 @@ else:
             base_df = stocks_map[pr_ticker]
             df_aug = _apply_session_sentiment(base_df, st.session_state.get("senti_table", None))
             df_aug["Date"] = pd.to_datetime(df_aug["Date"], errors="coerce")
-            mask_span = (df_aug["Date"].dt.date >= pr_date_range[0]) & (df_aug["Date"].dt.date <= pr_date_range[1])
+            mask_span = (df_aug["Date"].dt.date >= pr_start) & (df_aug["Date"].dt.date <= pr_end)
             df_span = df_aug.loc[mask_span].copy().sort_values("Date")
+
         
             SENTIMENT_COLS = ['Positive_Count', 'Negative_Count', 'Neutral_Count']
         
@@ -1294,7 +1292,7 @@ else:
 
         base_df = stocks_map[pr_ticker].copy()
         base_df["Date"] = pd.to_datetime(base_df["Date"], errors="coerce")
-        mask_span = (base_df["Date"].dt.date >= pr_date_range[0]) & (base_df["Date"].dt.date <= pr_date_range[1])
+        mask_span = (base_df["Date"].dt.date >= pr_start) & (base_df["Date"].dt.date <= pr_end)
         df_span = base_df.loc[mask_span].copy().sort_values("Date")
 
         st.caption(
@@ -1374,8 +1372,8 @@ else:
         try:
             model, sx, sy, cols = train_global_lr_tech(base_df, int(pr_window))
 
-            win_start_local = max(pr_date_range[0], (pr_date_range[1] - timedelta(days=int(pr_window)-1)))
-            win_end_local   = pr_date_range[1]
+            win_start_local = pr_start
+            win_end_local   = pr_end
 
             def build_one_feature_from_window_prices(df_prices: pd.DataFrame,
                                                      win_start, win_end, window_size: int) -> pd.DataFrame:
@@ -1533,11 +1531,10 @@ else:
                 "Sentiment Neutral":  0,
             })
 
-        default_start = max(global_min, global_max - timedelta(days=W-1))
-        win_start = st.date_input("Start date for sentiment window", value=default_start,
-                                  min_value=global_min, max_value=global_max, key="mix_win_start")
-        win_end = min(global_max, win_start + timedelta(days=W-1))
+        win_start = pr_start
+        win_end   = pr_end
         st.caption(f"Window aktif: **{W} hari** → rentang: **{win_start} s/d {win_end}**")
+
 
         # gunakan satu sesi saja
         if "senti_table_range" not in st.session_state:
@@ -1619,8 +1616,9 @@ else:
         base_df_raw = stocks_map[pr_ticker]
         df_aug = _apply_session_sentiment(base_df_raw, st.session_state.get("senti_table", None))
         df_aug["Date"] = pd.to_datetime(df_aug["Date"], errors="coerce")
-        mask_span = (df_aug["Date"].dt.date >= pr_date_range[0]) & (df_aug["Date"].dt.date <= pr_date_range[1])
+        mask_span = (df_aug["Date"].dt.date >= pr_start) & (df_aug["Date"].dt.date <= pr_end)
         df_span = df_aug.loc[mask_span].copy().sort_values("Date")
+
 
         st.caption(
             f"Training span after merge: {len(df_span):,} baris | "
