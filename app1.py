@@ -42,6 +42,40 @@ try:
 except Exception:
     pass
 # ==== END ULTRA-EARLY ====
+# ==== HF CONFIG COMPAT: isi default untuk artefak lama ====
+def _ensure_transformer_config_defaults(st_model):
+    """
+    Isi default di config transformer agar tidak AttributeError
+    pada artefak lama (BertConfig dkk) yang belum punya field ini.
+    Idempotent & aman dipanggil berulang.
+    """
+    try:
+        first_mod = st_model._first_module()
+        core = getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None)
+        if core is None:
+            return
+        cfg = getattr(core, "config", None)
+        if cfg is None:
+            return
+
+        defaults = {
+            "output_attentions": False,
+            "output_hidden_states": False,
+            "is_decoder": False,
+            "add_cross_attention": False,
+            "use_cache": False,
+            "torchscript": False,
+        }
+        for k, v in defaults.items():
+            if not hasattr(cfg, k):
+                setattr(cfg, k, v)
+
+        # beberapa artefak lama set None
+        if hasattr(cfg, "return_dict") and cfg.return_dict is None:
+            cfg.return_dict = False
+    except Exception:
+        # jangan biarkan compat meledak
+        pass
 
 # ==== END SHIM ====
 
@@ -801,40 +835,33 @@ if pr_feature == "Sentiment":
     from sentence_transformers import SentenceTransformer
     
     class SBERTEncoder(BaseEstimator, TransformerMixin):
-        def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-                     batch_size=64, normalize_embeddings=True, device=None):
-            self.model_name = model_name
-            self.batch_size = batch_size
-            self.normalize_embeddings = normalize_embeddings
-            self.device = device
-    
-            # === INI TEMPATNYA (SETELAH INIT MODEL) ===
-            self._encoder = SentenceTransformer(self.model_name, device=self.device)
-            _ensure_pad_token_for_st_model(self._encoder)           # ✅ panggil di __init__
-            _ensure_transformer_config_defaults(self._encoder)       # ✅ panggil di __init__
-    
-        def fit(self, X, y=None):
-            return self
-    
-        def transform(self, X):
-            import pandas as pd
-            texts = pd.Series(X).astype(str).tolist()
-    
-            # === DAN PANGGIL LAGI SEBELUM ENCODE (AMAN, idempotent) ===
-            _ensure_pad_token_for_st_model(self._encoder)           # ✅ sebelum encode
-            _ensure_transformer_config_defaults(self._encoder)       # ✅ sebelum encode
-    
-            embs = self._encoder.encode(
-                texts,
-                batch_size=self.batch_size,
-                show_progress_bar=False,
-                convert_to_numpy=True,
-                normalize_embeddings=self.normalize_embeddings,
-            )
-            return embs
+    def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                 batch_size=64, normalize_embeddings=True, device=None):
+        self.model_name = model_name
+        self.batch_size = batch_size
+        self.normalize_embeddings = normalize_embeddings
+        self.device = device
 
+        self._encoder = SentenceTransformer(self.model_name, device=self.device)
+        _ensure_pad_token_for_st_model(self._encoder)           # ✅ tokenizer aman
+        _ensure_transformer_config_defaults(self._encoder)      # ✅ INI YANG PENTING
 
+    def transform(self, X):
+        import pandas as pd
+        texts = pd.Series(X).astype(str).tolist()
 
+        # panggil lagi (idempotent) sebelum encode
+        _ensure_pad_token_for_st_model(self._encoder)
+        _ensure_transformer_config_defaults(self._encoder)      # ✅ PENTING
+
+        embs = self._encoder.encode(
+            texts,
+            batch_size=self.batch_size,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+            normalize_embeddings=self.normalize_embeddings,
+        )
+        return embs
 
     
     # ==== Daftarkan alias ke __main__ supaya unpickle tidak gagal ====
@@ -1829,37 +1856,34 @@ if pr_feature == "Sentiment + Technical":
     from sentence_transformers import SentenceTransformer
     
     class SBERTEncoder(BaseEstimator, TransformerMixin):
-        def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-                     batch_size=64, normalize_embeddings=True, device=None):
-            self.model_name = model_name
-            self.batch_size = batch_size
-            self.normalize_embeddings = normalize_embeddings
-            self.device = device
-    
-            # === INI TEMPATNYA (SETELAH INIT MODEL) ===
-            self._encoder = SentenceTransformer(self.model_name, device=self.device)
-            _ensure_pad_token_for_st_model(self._encoder)           # ✅ panggil di __init__
-            _ensure_transformer_config_defaults(self._encoder)       # ✅ panggil di __init__
-    
-        def fit(self, X, y=None):
-            return self
-    
-        def transform(self, X):
-            import pandas as pd
-            texts = pd.Series(X).astype(str).tolist()
-    
-            # === DAN PANGGIL LAGI SEBELUM ENCODE (AMAN, idempotent) ===
-            _ensure_pad_token_for_st_model(self._encoder)           # ✅ sebelum encode
-            _ensure_transformer_config_defaults(self._encoder)       # ✅ sebelum encode
-    
-            embs = self._encoder.encode(
-                texts,
-                batch_size=self.batch_size,
-                show_progress_bar=False,
-                convert_to_numpy=True,
-                normalize_embeddings=self.normalize_embeddings,
-            )
-            return embs
+    def __init__(self, model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                 batch_size=64, normalize_embeddings=True, device=None):
+        self.model_name = model_name
+        self.batch_size = batch_size
+        self.normalize_embeddings = normalize_embeddings
+        self.device = device
+
+        self._encoder = SentenceTransformer(self.model_name, device=self.device)
+        _ensure_pad_token_for_st_model(self._encoder)           # ✅ tokenizer aman
+        _ensure_transformer_config_defaults(self._encoder)      # ✅ INI YANG PENTING
+
+    def transform(self, X):
+        import pandas as pd
+        texts = pd.Series(X).astype(str).tolist()
+
+        # panggil lagi (idempotent) sebelum encode
+        _ensure_pad_token_for_st_model(self._encoder)
+        _ensure_transformer_config_defaults(self._encoder)      # ✅ PENTING
+
+        embs = self._encoder.encode(
+            texts,
+            batch_size=self.batch_size,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+            normalize_embeddings=self.normalize_embeddings,
+        )
+        return embs
+
 
 
     
