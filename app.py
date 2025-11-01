@@ -75,29 +75,51 @@ except Exception as e:
     print("Compat shim (BERT SDPA) failed:", e)
 
 # --- SBERT tokenizer pad-token safety patch ---
+# --- SBERT tokenizer pad-token safety patch (REPLACE your version with this) ---
 def _ensure_pad_token_for_sbert(sbert_model):
     """
-    Pastikan tokenizer SBERT punya pad_token & atribut _pad_token,
-    dan resize embedding model kalau kita menambah token baru.
+    Pastikan tokenizer SBERT punya pad_token (via setter resmi),
+    dan resize embedding model jika penambahan token terjadi.
+    Aman untuk tokenizer 'fast'.
     """
     try:
         mod = sbert_model._first_module()  # sentence_transformers.models.Transformer
         tok = mod.tokenizer
 
-        # Pastikan atribut internal ada agar property tok.pad_token tidak error
-        if not hasattr(tok, "_pad_token"):
-            tok._pad_token = None
+        # 1) Jika akses pad_token melempar AttributeError, kita paksa set via add_special_tokens
+        needs_set = False
+        try:
+            _ = tok.pad_token  # bisa raise AttributeError di beberapa versi
+            needs_set = (tok.pad_token is None)
+        except AttributeError:
+            needs_set = True
 
-        # Kalau belum ada pad_token, set sekarang dan resize embedding
-        if tok.pad_token is None:
-            cand = tok.sep_token or tok.eos_token or tok.cls_token or "[PAD]"
+        if needs_set:
+            # pilih kandidat pad token yang aman
+            cand = None
+            # coba dari special tokens map dulu
+            try:
+                stm = getattr(tok, "special_tokens_map", {}) or {}
+                cand = stm.get("pad_token", None) or stm.get("sep_token", None)
+            except Exception:
+                cand = None
+            if not cand:
+                # fallback
+                cand = getattr(tok, "sep_token", None) or getattr(tok, "eos_token", None) \
+                       or getattr(tok, "cls_token", None) or "[PAD]"
+
+            # set pad token via API resmi (akan set pad_token_id juga)
             tok.add_special_tokens({"pad_token": cand})
+
+            # resize embedding agar ukuran vocab sinkron
             try:
                 mod.auto_model.resize_token_embeddings(len(tok))
             except Exception:
                 pass
+
     except Exception as e:
         print("Pad-token patch failed:", e)
+
 
 
 # =========================================
@@ -629,13 +651,22 @@ if pr_feature == "Sentiment":
 
 
         def fit(self, X, y=None): return self
+
         def transform(self, X):
-            texts = pd.Series(X).astype(str).tolist()
-            embs = self._encoder.encode(
-                texts, batch_size=self.batch_size, show_progress_bar=False,
-                convert_to_numpy=True, normalize_embeddings=self.normalize_embeddings,
-            )
-            return embs
+        texts = pd.Series(X).astype(str).tolist()
+        embs = self._encoder.encode(
+            texts,
+            batch_size=self.batch_size,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+            normalize_embeddings=self.normalize_embeddings,
+            padding=False,      # <- tambah
+            truncation=True,    # <- tambah
+            max_length=512      # opsional
+        )
+        return embs
+
+
 
     @st.cache_resource(show_spinner=False)
     def _get_translator():
