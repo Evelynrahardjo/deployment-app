@@ -53,18 +53,58 @@ def is_git_lfs_pointer(path: str) -> bool:
 
 def ensure_model_file(path_joblib: str) -> None:
     """
-    Cek keberadaan & bukan pointer. (Bisa kamu perluas utk auto-download dari st.secrets["MODEL_URL"])
+    Pastikan file ada & biner. Jika:
+    - tidak ada file: coba unduh dari st.secrets["MODEL_URL"].
+    - file adalah Git LFS pointer: coba unduh dari st.secrets["MODEL_URL"] dan timpa.
     """
+    import requests
+    from streamlit.runtime.secrets import get_secret
+
+    def _is_pointer(p: str) -> bool:
+        if not os.path.exists(p) or os.path.isdir(p): 
+            return False
+        with open(p, "rb") as f:
+            head = f.read(300)
+        return b"version https://git-lfs.github.com/spec/v1" in head
+
+    def _download(url: str, dst: str) -> None:
+        r = requests.get(url, timeout=60)
+        r.raise_for_status()
+        with open(dst, "wb") as f:
+            f.write(r.content)
+
+    model_url = None
+    try:
+        # aman kalau secret tidak ada
+        model_url = get_secret("MODEL_URL")
+    except Exception:
+        pass
+
+    # 1) jika file belum ada → coba unduh
     if not os.path.exists(path_joblib):
-        raise FileNotFoundError(
-            f"Model tidak ditemukan: {path_joblib}. "
-            "Upload artefak biner asli (.joblib), bukan pointer."
-        )
-    if is_git_lfs_pointer(path_joblib):
-        raise RuntimeError(
-            "Terdeteksi Git LFS POINTER, bukan artefak biner. "
-            "Pastikan push LFS-nya berhasil (dan Streamlit Cloud menarik konten LFS)."
-        )
+        if model_url:
+            _download(model_url, path_joblib)
+        else:
+            raise FileNotFoundError(
+                f"Model tidak ditemukan: {path_joblib}. "
+                "Set st.secrets['MODEL_URL'] untuk auto-download, atau commit file binernya."
+            )
+
+    # 2) jika file ada tapi pointer → coba unduh & timpa
+    if _is_pointer(path_joblib):
+        if model_url:
+            _download(model_url, path_joblib)
+            # verifikasi ulang setelah unduh
+            if _is_pointer(path_joblib):
+                raise RuntimeError(
+                    "MODEL_URL terunduh tetapi masih pointer. Pastikan URL mengarah ke biner .joblib."
+                )
+        else:
+            raise RuntimeError(
+                "Terdeteksi Git LFS POINTER. Set st.secrets['MODEL_URL'] "
+                "ke URL biner .joblib (Hugging Face/Drive/S3) agar auto-download."
+            )
+
 
 
 # ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
