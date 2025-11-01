@@ -1,24 +1,4 @@
 
-# ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
-import sys, types
-
-# 1) Shim utk artefak lama yg refer ke sentence_transformers.model_card
-if "sentence_transformers.model_card" not in sys.modules:
-    _mc = types.ModuleType("sentence_transformers.model_card")
-    class ModelCard: pass
-    _mc.ModelCard = ModelCard
-    sys.modules["sentence_transformers.model_card"] = _mc
-
-# 2) Shim utk kode lama yg memanggil huggingface_hub.cached_download
-try:
-    import huggingface_hub as _hf
-    if not hasattr(_hf, "cached_download") and hasattr(_hf, "hf_hub_download"):
-        def cached_download(*args, **kwargs):
-            return _hf.hf_hub_download(*args, **kwargs)
-        _hf.cached_download = cached_download
-except Exception:
-    pass
-
 # %%writefile app.py
 # =========================================
 # IMPORTS
@@ -615,6 +595,28 @@ if pr_feature == "Sentiment":
                 f"File pipeline tidak ditemukan: {path_joblib}. "
                 "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
             )
+        # ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
+        import sys, types
+        
+        # 1) Shim untuk modul yang dihapus di sentence-transformers v3.x
+        if "sentence_transformers.model_card" not in sys.modules:
+            mod = types.ModuleType("sentence_transformers.model_card")
+            # Definisikan class yang dicari pickle lama
+            class SentenceTransformerModelCardData:
+                # Bisa kosong; cukup ada supaya unpickle lolos
+                def __init__(self, *args, **kwargs):
+                    for k, v in kwargs.items():
+                        setattr(self, k, v)
+            mod.SentenceTransformerModelCardData = SentenceTransformerModelCardData
+            sys.modules["sentence_transformers.model_card"] = mod
+        
+        # 2) (Opsional) Shim lain yang kadang muncul pada artefak lama
+        #    Hindari gagal import saat unpickle tokenizers / old paths
+        try:
+            import tokenizers  # memastikan tersedia
+        except Exception:
+            pass
+
         pipe = joblib.load(path_joblib)
         return pipe
 
