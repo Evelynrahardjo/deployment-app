@@ -1,3 +1,4 @@
+import st
 st.set_page_config(
     page_title="INDONESIA BANKING STOCK PRICE PREDICTION",
     page_icon="📈",
