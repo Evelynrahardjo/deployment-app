@@ -792,39 +792,71 @@ else:
     if "pr_date_range" not in st.session_state:
         st.session_state.pr_date_range = _init_default_range()
     
-    def _as_date(d):
-        # jaga-jaga jika datangnya datetime
-        return getattr(d, "date", lambda: d)() if d is not None else d
+    from typing import Tuple, Optional, Union
+
+    DateLike = Union[datetime, pd.Timestamp, np.datetime64, 'datetime.date']
     
-    def _normalize_to_window(val, W):
-        """Terima single-date atau (start, end) -> kembalikan (start, end) yang terkunci W hari."""
-        if isinstance(val, tuple) and len(val) == 2:
-            s, e = val
-        else:
-            # State lama: single-date
-            s = val
-            e = None
-        s = _as_date(s)
-        e = _as_date(e) if e else None
+    def _as_date(d: Optional[Union[DateLike, Tuple, list]]) -> Optional['datetime.date']:
+        """Konversi ke date; kalau datangnya tuple/list tak sengaja, ambil elemen pertamanya."""
+        if d is None:
+            return None
+        if isinstance(d, (list, tuple)):  # flatten kecelakaan: ((start,end),) atau (start,)
+            if not d:
+                return None
+            return _as_date(d[0])
+        if isinstance(d, pd.Timestamp):
+            return d.date()
+        if isinstance(d, np.datetime64):
+            return pd.to_datetime(d).date()
+        if isinstance(d, datetime):
+            return d.date()
+        # kalau sudah datetime.date, biarkan
+        return d
+    
+    def _flatten_range(val) -> Tuple[Optional['datetime.date'], Optional['datetime.date']]:
+        """Terima berbagai bentuk (date), (start,end), ((start,end),), [start,end], dst → pulang (start,end/None)."""
+        if isinstance(val, (list, tuple)):
+            if not val:
+                return None, None
+            # kalau bentuknya ((start,end),) → buka satu lapis
+            if len(val) == 1 and isinstance(val[0], (list, tuple)):
+                val = val[0]
+            if len(val) == 1:
+                return _as_date(val[0]), None
+            # ambil hanya dua pertama
+            return _as_date(val[0]), _as_date(val[1])
+        # single value (date)
+        return _as_date(val), None
+    
+    def _normalize_to_window(val, W: int) -> Tuple['datetime.date','datetime.date']:
+        """Selalu kembalikan (start, end) dengan panjang W hari (inklusif), dipotong ke hari ini bila perlu."""
+        s, e = _flatten_range(val)
+        if s is None and e is None:
+            # fallback aman: pakai hari ini
+            s = _today
+        if s is None and e is not None:
+            s = e
         if e is None:
             e = min(s + timedelta(days=W-1), _today)
         if s > e:
             s, e = e, s
-        # lock panjang W (inklusif)
+        # kunci panjang W (inklusif)
         e = min(s + timedelta(days=W-1), _today)
         return (s, e)
     
-    with c1:
-        # Pakai key baru agar tidak tabrakan dengan state lama
-        raw = st.date_input(
-            "Date Range (locked to window)",
-            value=tuple(st.session_state.pr_date_range),
-            key="pr_date_range_v2",
-        )
+    # --- Pemakaian ---
+    raw = st.date_input(
+        "Date Range (locked to window)",
+        value=tuple(st.session_state.pr_date_range),  # (start, end)
+        key="pr_date_range_v2",
+        # (opsional) tambahkan batas biar UX rapi:
+        # min_value=_today - timedelta(days=365*3),
+        # max_value=_today,
+    )
     
-    # Raw bisa single atau tuple → normalkan selalu jadi (start, end)
     st.session_state.pr_date_range = _normalize_to_window(raw, W)
     pr_start, pr_end = st.session_state.pr_date_range
+
 
     
     
