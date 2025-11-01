@@ -1115,9 +1115,10 @@ else:
                 st.success("Tabel di-reset sesuai window & start date saat ini.")
 
         # ====== Predict stock (Sentiment only; contoh sederhana)
+        # ====== Predict stock (Sentiment only; with Next-Day fallback)
         st.write("---")
         st.subheader("🔍️ Predict Stock (Linear Regression, Sentiment Only)")
-
+        
         if pr_ticker not in stocks_map:
             st.warning(f"Ticker '{pr_ticker}' tidak ada di data.")
         else:
@@ -1126,7 +1127,9 @@ else:
             df_aug["Date"] = pd.to_datetime(df_aug["Date"], errors="coerce")
             mask_span = (df_aug["Date"].dt.date >= pr_date_range[0]) & (df_aug["Date"].dt.date <= pr_date_range[1])
             df_span = df_aug.loc[mask_span].copy().sort_values("Date")
-
+        
+            SENTIMENT_COLS = ['Positive_Count', 'Negative_Count', 'Neutral_Count']
+        
             def create_features_sent_only(data: pd.DataFrame, window: int = 1):
                 data = data.copy()
                 need_cols = ['Date','Adj Close','Sentiment Positive','Sentiment Negative','Sentiment Neutral']
@@ -1136,7 +1139,7 @@ else:
                 for c in ['Adj Close','Sentiment Positive','Sentiment Negative','Sentiment Neutral']:
                     data[c] = pd.to_numeric(data[c], errors='coerce')
                 data = data.dropna(subset=['Date']).reset_index(drop=True)
-
+        
                 n = len(data)
                 feats, targets, tdates = [], [], []
                 for i in range(n - window):
@@ -1154,10 +1157,9 @@ else:
                 y = pd.Series(targets, name='Target', dtype=float)
                 d = pd.Series(tdates, name='Date', dtype='datetime64[ns]')
                 return X, y, d
-
-            SENTIMENT_COLS = ['Positive_Count', 'Negative_Count', 'Neutral_Count']
-
+        
             if len(df_span) >= (int(pr_window) + 1):
+                # ---------- BACKTEST ----------
                 X, y, d = create_features_sent_only(df_span, window=int(pr_window))
                 if len(X) == 0:
                     st.warning("Tidak ada sample fitur yang terbentuk dari rentang & window ini.")
@@ -1168,41 +1170,117 @@ else:
                     X_tr, X_te = X.iloc[:tr_n], X.iloc[tr_n:]
                     y_tr, y_te = y.iloc[:tr_n], y.iloc[tr_n:]
                     d_te = d.iloc[tr_n:]
-
+        
+                    # scale hanya kolom non-sentiment
                     cols_to_scale = [c for c in X.columns if c not in SENTIMENT_COLS]
-                    sx = StandardScaler()
+                    sx = StandardScaler(); sy = StandardScaler()
                     X_tr_s, X_te_s = X_tr.copy(), X_te.copy()
                     if cols_to_scale:
                         X_tr_s[cols_to_scale] = sx.fit_transform(X_tr[cols_to_scale])
                         X_te_s[cols_to_scale] = sx.transform(X_te[cols_to_scale])
-
-                    sy = StandardScaler()
                     y_tr_s = sy.fit_transform(y_tr.values.reshape(-1,1)).ravel()
-
+        
                     model = LinearRegression().fit(X_tr_s, y_tr_s)
-                    y_pred_s = model.predict(X_te_s)
-                    y_pred   = sy.inverse_transform(y_pred_s.reshape(-1,1)).ravel()
-
+                    y_pred = sy.inverse_transform(
+                        model.predict(X_te_s).reshape(-1,1)
+                    ).ravel()
+        
                     res_table = pd.DataFrame({
                         "Date": pd.to_datetime(d_te).dt.strftime("%d/%m/%Y"),
                         "Actual": y_te.values,
                         "Prediction": np.round(y_pred, 2)
                     }).sort_values("Date").reset_index(drop=True)
-
+        
                     st.markdown("### 📋 Actual vs Prediction")
                     st.dataframe(res_table, use_container_width=True, height=360)
-                    st.download_button("💾 Download results (CSV)",
-                                       data=res_table.to_csv(index=False).encode("utf-8"),
-                                       file_name=f"{pr_ticker}_res_window{pr_window}_SENT.csv",
-                                       mime="text/csv",
-                                       use_container_width=True)
-
+                    st.download_button(
+                        "💾 Download results (CSV)",
+                        data=res_table.to_csv(index=False).encode("utf-8"),
+                        file_name=f"{pr_ticker}_res_window{pr_window}_SENT.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+        
                     mae  = mean_absolute_error(y_te.values, y_pred)
                     rmse = float(np.sqrt(mean_squared_error(y_te.values, y_pred)))
                     r2   = r2_score(y_te.values, y_pred)
                     st.caption(f"MAE: {mae:.6f} | RMSE: {rmse:.6f} | R²: {r2:.6f}")
+        
             else:
-                st.info("Data di rentang tanggal ini belum cukup untuk backtest. Tambahkan data/sentimen dulu.")
+                # ---------- NEXT-DAY FALLBACK (seperti Technical) ----------
+                X_full, y_full, _ = create_features_sent_only(df_aug, window=int(pr_window))
+                if len(X_full) < 2:
+                    st.info("Data historis terlalu sedikit untuk melatih model global.")
+                else:
+                    cols_to_scale = [c for c in X_full.columns if c not in SENTIMENT_COLS]
+                    sx = StandardScaler(); sy = StandardScaler()
+                    Xs = X_full.copy()
+                    if cols_to_scale:
+                        Xs[cols_to_scale] = sx.fit_transform(X_full[cols_to_scale])
+                    ys = sy.fit_transform(y_full.values.reshape(-1,1)).ravel()
+                    model = LinearRegression().fit(Xs, ys)
+        
+                    # 1 baris fitur dari window aktif (pakai senti_table yang sudah digabung)
+                    win_start_local, win_end_local = st.session_state.senti_table_range
+                    win_start_local = pd.to_datetime(win_start_local).date()
+                    win_end_local   = pd.to_datetime(win_end_local).date()
+        
+                    p = df_aug.copy()
+                    p["Date"] = pd.to_datetime(p["Date"])
+                    mask_w = (p["Date"].dt.date >= win_start_local) & (p["Date"].dt.date <= win_end_local)
+                    w = p.loc[mask_w].sort_values("Date").tail(int(pr_window))
+                    if len(w) < int(pr_window):
+                        w = p.sort_values("Date").tail(int(pr_window))
+                    if w.empty:
+                        st.warning("Tidak cukup data untuk membentuk fitur window aktif.")
+                    else:
+                        X1 = pd.DataFrame([{
+                            'Positive_Count': float(w['Sentiment Positive'].sum()),
+                            'Negative_Count': float(w['Sentiment Negative'].sum()),
+                            'Neutral_Count' : float(w['Sentiment Neutral'].sum()),
+                            'Average_Price' : float(w['Adj Close'].mean()),
+                        }])
+                        X1s = X1.copy()
+                        if cols_to_scale:
+                            X1s[cols_to_scale] = sx.transform(X1[cols_to_scale])
+        
+                        y1_s = float(model.predict(X1s)[0])
+                        y1   = float(sy.inverse_transform([[y1_s]])[0,0])
+        
+                        # Cari actual (gabung df_stock2 + df_stock_fix_1April)
+                        PRICE_PATHS = [repo_path("df_stock2.csv"),
+                                       repo_path("df_stock_fix_1April (1).csv"),
+                                       repo_path("df_stock.csv")]
+                        price_catalog = _price_catalog(PRICE_PATHS)
+        
+                        next_day = (pd.to_datetime(win_end_local) + pd.Timedelta(days=1)).date()
+                        found_dt, actual_val = _find_actual_with_lookahead(
+                            ticker=pr_ticker, start_date=next_day, df_base=df_aug,
+                            price_cat=price_catalog, lookahead_days=7
+                        )
+                        show_dt = found_dt if found_dt is not None else next_day
+        
+                        res_table = pd.DataFrame([{
+                            "Date": pd.to_datetime(show_dt).strftime("%d/%m/%Y"),
+                            "Actual": actual_val,
+                            "Prediction": round(y1, 2)
+                        }])
+        
+                        st.markdown("### 📋 Actual vs Prediction (Next Day)")
+                        st.dataframe(res_table, use_container_width=True, height=120)
+                        st.download_button(
+                            "💾 Download Result (CSV)",
+                            data=res_table.to_csv(index=False).encode("utf-8"),
+                            file_name=f"{pr_ticker}_nextday_window{pr_window}_SENT.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+        
+                        if np.isnan(actual_val):
+                            st.caption("Actual belum tersedia pada sumber harga (gabungan df_stock2 + df_stock_fix_1April).")
+                        elif found_dt is not None and found_dt != next_day:
+                            st.caption(f"Catatan: {next_day} hari non-trading. Actual diambil pada {found_dt}.")
+
 
     # =========================================================
     # TECHNICAL PAGE (pr_feature == "Technical")
