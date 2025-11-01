@@ -7,6 +7,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import sys, types
 
 # Plotly
 import plotly.express as px
@@ -590,7 +591,7 @@ if pr_feature == "Sentiment":
     # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
     # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
   # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
-    import sys, types
+
     try:
         import sentence_transformers.model_card  # ✅ kalau modulnya ada, lanjut normal
     except Exception:
@@ -1569,7 +1570,7 @@ elif pr_feature == "Sentiment + Technical":
 
     # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
     # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
-import sys, types
+
 try:
     import sentence_transformers.model_card  # ✅ kalau modulnya ada, lanjut normal
 except Exception:
