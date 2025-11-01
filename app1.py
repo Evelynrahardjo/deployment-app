@@ -693,45 +693,45 @@ if pr_feature == "Sentiment":
         if tok is not None:
             _ensure_tokenizer_tokens(tok)
 
-    def _ensure_transformer_config_defaults(st_model):
-    """
-    Beberapa artefak lama tidak menyertakan field di BertConfig.
-    Paksa isi default agar transformers terbaru tidak `AttributeError`.
-    Aman dipanggil berulang-ulang.
-    """
-    try:
-        # Ambil model dasar dari SentenceTransformer
-        first_mod = st_model._first_module()
-        core = getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None)
-        if core is None:
-            return
-        cfg = getattr(core, "config", None)
-        if cfg is None:
-            return
-
-        # Field yang sering hilang pada artefak lama
-        defaults = {
-            "output_attentions": False,
-            "output_hidden_states": False,
-            "is_decoder": False,
-            "add_cross_attention": False,
-            "use_cache": False,          # untuk decoder; aman False di encoder
-            "torchscript": False,        # kadang disentuh beberapa wrapper
-        }
-        for k, v in defaults.items():
-            if not hasattr(cfg, k):
-                setattr(cfg, k, v)
-
-        # Bonus: pastikan return_dict default aman; forward sudah pakai return_dict=False,
-        # tapi tidak ada salahnya set juga di config jika tersedia.
+        def _ensure_transformer_config_defaults(st_model):
+        """
+        Beberapa artefak lama tidak menyertakan field di BertConfig.
+        Paksa isi default agar transformers terbaru tidak `AttributeError`.
+        Aman dipanggil berulang-ulang.
+        """
         try:
-            if hasattr(cfg, "return_dict") and cfg.return_dict is None:
-                cfg.return_dict = False
+            # Ambil model dasar dari SentenceTransformer
+            first_mod = st_model._first_module()
+            core = getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None)
+            if core is None:
+                return
+            cfg = getattr(core, "config", None)
+            if cfg is None:
+                return
+    
+            # Field yang sering hilang pada artefak lama
+            defaults = {
+                "output_attentions": False,
+                "output_hidden_states": False,
+                "is_decoder": False,
+                "add_cross_attention": False,
+                "use_cache": False,          # untuk decoder; aman False di encoder
+                "torchscript": False,        # kadang disentuh beberapa wrapper
+            }
+            for k, v in defaults.items():
+                if not hasattr(cfg, k):
+                    setattr(cfg, k, v)
+    
+            # Bonus: pastikan return_dict default aman; forward sudah pakai return_dict=False,
+            # tapi tidak ada salahnya set juga di config jika tersedia.
+            try:
+                if hasattr(cfg, "return_dict") and cfg.return_dict is None:
+                    cfg.return_dict = False
+            except Exception:
+                pass
         except Exception:
+            # jangan biarkan compat ini meledak
             pass
-    except Exception:
-        # jangan biarkan compat ini meledak
-        pass
 
     # ==== PAD-TOKEN SAFETY untuk tokenizer HF/SBERT ====
     def _ensure_pad_token_for_st_model(st_model):
