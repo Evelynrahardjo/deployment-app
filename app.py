@@ -621,7 +621,7 @@ def load_pipeline(path_joblib: str):
 
 
 
-def predict_sentiment(pipe, txt: str):
+ct_sentiment(pipe, txt: str):
     pred = pipe.predict([txt])[0]
     try:
         margins = pipe.decision_function([txt])
@@ -1577,46 +1577,48 @@ def load_pipeline(path_joblib: str):
     pipe = joblib.load(path_joblib)
     return pipe
 
-    def predict_sentiment(pipe, txt: str):
-        pred = pipe.predict([txt])[0]
+# ← tidak terindent; berdiri sendiri, di luar load_pipeline
+def predict_sentiment(pipe, txt: str):
+    pred = pipe.predict([txt])[0]
+    try:
+        margins = pipe.decision_function([txt])
+        score = float(np.max(margins if getattr(margins, "ndim", 1) == 1 else margins[0]))
+    except Exception:
+        score = None
+    return pred, score
+
+# ← pastikan TIDAK terindent (kolom paling kiri)
+if run_predict_btn:
+    if not user_text.strip():
+        st.warning("Masukkan berita terlebih dahulu ya.")
+    else:
         try:
-            margins = pipe.decision_function([txt])
-            score = float(np.max(margins if getattr(margins, "ndim", 1) == 1 else margins[0]))
-        except Exception:
-            score = None
-        return pred, score
+            text_input = user_text.strip()
+            text_for_model = safe_translate_to_en(text_input) if translate_opt else text_input
+            with st.spinner("🔧 Loading pipeline & running inference..."):
+                pipe = load_pipeline(PATH_PIPELINE)
+                y_pred, score = predict_sentiment(pipe, text_for_model)
+            lower = str(y_pred).strip().lower()
+            if   lower in {"positive","pos"}:  pred_norm = "Positive"
+            elif lower in {"negative","neg"}:  pred_norm = "Negative"
+            elif lower in {"neutral","neu","netral"}: pred_norm = "Neutral"
+            else: pred_norm = str(y_pred).strip().capitalize()
 
-    if run_predict_btn:
-        if not user_text.strip():
-            st.warning("Masukkan berita terlebih dahulu ya.")
-        else:
-            try:
-                text_input = user_text.strip()
-                text_for_model = safe_translate_to_en(text_input) if translate_opt else text_input
-                with st.spinner("🔧 Loading pipeline & running inference..."):
-                    pipe = load_pipeline(PATH_PIPELINE)
-                    y_pred, score = predict_sentiment(pipe, text_for_model)
-                lower = str(y_pred).strip().lower()
-                if   lower in {"positive","pos"}:  pred_norm = "Positive"
-                elif lower in {"negative","neg"}:  pred_norm = "Negative"
-                elif lower in {"neutral","neu","netral"}: pred_norm = "Neutral"
-                else: pred_norm = str(y_pred).strip().capitalize()
+            st.markdown("### Results: Sentiment **Positive / Negative / Neutral**")
+            if   pred_norm == "Positive": st.success("🟢 **Positive** — berita bernada positif.")
+            elif pred_norm == "Negative": st.error("🔴 **Negative** — berita bernada negatif.")
+            elif pred_norm == "Neutral":  st.info("⚪ **Neutral** — berita bernada netral.")
+            else: st.warning(f"Hasil tidak teridentifikasi: `{y_pred}`")
 
-                st.markdown("### Results: Sentiment **Positive / Negative / Neutral**")
-                if   pred_norm == "Positive": st.success("🟢 **Positive** — berita bernada positif.")
-                elif pred_norm == "Negative": st.error("🔴 **Negative** — berita bernada negatif.")
-                elif pred_norm == "Neutral":  st.info("⚪ **Neutral** — berita bernada netral.")
-                else: st.warning(f"Hasil tidak teridentifikasi: `{y_pred}`")
-
-                with st.expander("Preview (English translation) & Model Info"):
-                    st.write(text_for_model)
-                    if score is not None: st.caption(f"Margin score: `{score:.4f}`")
-                    st.caption("Pipeline: SBERTEncoder → (ROS saat training) → LinearSVC")
-                st.session_state["last_pred_label"] = pred_norm
-                st.session_state["last_pred_score"] = score
-            except Exception as e:
-                st.error("Terjadi error saat prediksi.")
-                st.exception(e)
+            with st.expander("Preview (English translation) & Model Info"):
+                st.write(text_for_model)
+                if score is not None: st.caption(f"Margin score: `{score:.4f}`")
+                st.caption("Pipeline: SBERTEncoder → (ROS saat training) → LinearSVC")
+            st.session_state["last_pred_label"] = pred_norm
+            st.session_state["last_pred_score"] = score
+        except Exception as e:
+            st.error("Terjadi error saat prediksi.")
+            st.exception(e)
 
     # ---------------------------
     # 2) Daily sentiment logger
