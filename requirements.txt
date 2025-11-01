@@ -1,8 +1,10 @@
-# Core stack (legacy-friendly, cocok dgn pickle lama & Py3.12)
+# Core stack (legacy-friendly)
 torch==2.2.2
 transformers==4.39.3
 sentence-transformers==2.2.2
 tokenizers==0.15.2
+huggingface_hub==0.13.4     # <-- FIX PENTING
+safetensors==0.4.2          # aman untuk stack ini
 
 # SciPy stack
 numpy==1.26.4
