@@ -28,24 +28,21 @@ try:
 except Exception:
     pass
 
-def _ENSURE_BERT_SDPA_FLAGS(model):
-    """Pastikan setiap instance BertSdpaSelfAttention punya flag yang dibutuhkan."""
+def _ENSURE_BERT_SDPA_FOR_ST(st_model):
+    """Find the underlying HF model inside a SentenceTransformer and apply SDPA flags."""
     try:
-        from transformers.models.bert.modeling_bert import BertSdpaSelfAttention as _BertSdpaSelfAttention
-    except Exception:
-        return
-    try:
-        for m in getattr(model, "modules", lambda: [])():
-            if isinstance(m, _BertSdpaSelfAttention) and not hasattr(m, "require_contiguous_qkv"):
-                setattr(m, "require_contiguous_qkv", False)
+        first_mod = st_model._first_module() if hasattr(st_model, "_first_module") else None
+        core = (
+            (getattr(first_mod, "auto_model", None) or getattr(first_mod, "model", None))
+            if first_mod is not None else None
+        )
+        core = core or getattr(st_model, "auto_model", None) or getattr(st_model, "model", None)
+        if core is not None:
+            _ENSURE_BERT_SDPA_FLAGS(core)
     except Exception:
         pass
-# ==== END ULTRA-EARLY ====
 
-# setelah self._encoder = SentenceTransformer(...):
-_ENSURE_BERT_SDPA_FLAGS(self._encoder._first_module().auto_model if hasattr(self._encoder, "_first_module") else self._encoder)
-# atau kalau kamu sudah punya helper _ENSURE_ST_ENCODER_OK, kamu bisa panggil di sana juga:
-# _ENSURE_ST_ENCODER_OK(self._encoder); _ENSURE_BERT_SDPA_FLAGS(core_model)
+# ==== END ULTRA-EARLY ====
 
 
 import sys, types
@@ -956,8 +953,10 @@ if pr_feature == "Sentiment":
             self.device = device
     
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
-            _ENSURE_PAD_TOKEN_FOR_ST_MODEL(self._encoder)   # ✅ tokenizer aman
-            _ENSURE_ST_ENCODER_OK(self._encoder)      # <<< PENTING
+            _ENSURE_PAD_TOKEN_FOR_ST_MODEL(self._encoder)   # keep
+            _ENSURE_ST_ENCODER_OK(self._encoder)            # keep
+            _ENSURE_BERT_SDPA_FOR_ST(self._encoder)         # NEW: do SDPA here (self exists)
+
     
         def transform(self, X):
             import pandas as pd
@@ -2008,8 +2007,10 @@ if pr_feature == "Sentiment + Technical":
             self.device = device
     
             self._encoder = SentenceTransformer(self.model_name, device=self.device)
-            _ENSURE_PAD_TOKEN_FOR_ST_MODEL(self._encoder)   # ✅ tokenizer aman
-            _ENSURE_ST_ENCODER_OK(self._encoder)  # <<< PENTING
+            _ENSURE_PAD_TOKEN_FOR_ST_MODEL(self._encoder)   # keep
+            _ENSURE_ST_ENCODER_OK(self._encoder)            # keep
+            _ENSURE_BERT_SDPA_FOR_ST(self._encoder)         # NEW: do SDPA here (self exists)
+
   # <<< PENTING
       # ✅ INI YANG PENTING
     
