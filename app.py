@@ -61,12 +61,37 @@ except Exception:
     sys.modules["sentence_transformers.util"] = util_mod
 
 # 3) Shim utk perubahan atribut tokenizer: '_pad_token' → 'pad_token'
+# 3) Shim utk perubahan atribut tokenizer: '_pad_token' → 'pad_token'
 try:
     from transformers import PreTrainedTokenizerFast
     if not hasattr(PreTrainedTokenizerFast, "_pad_token"):
         PreTrainedTokenizerFast._pad_token = property(lambda self: self.pad_token)
 except Exception:
     pass
+
+# 4) Shim ringan utk joblib/Sklearn object lama yg expect module path lama
+try:
+    import sklearn
+    # Pastikan LinearSVC/LabelEncoder dsb bisa ditemukan saat unpickle
+    # (tidak mengubah perilaku; hanya memastikan import path ada)
+    from sklearn.svm import LinearSVC as _LinearSVC  # noqa: F401
+    from sklearn.preprocessing import LabelEncoder as _LabelEncoder  # noqa: F401
+except Exception:
+    pass
+
+# 5) Beberapa artefak lama memanggil fungsi di sentence_transformers.util
+try:
+    import sentence_transformers.util as _st_util
+    # Tambahkan stub bila atribut tertentu dicari saat unpickle
+    for _name in ("cos_sim", "semantic_search"):
+        if not hasattr(_st_util, _name):
+            setattr(_st_util, _name, lambda *a, **k: None)
+except Exception:
+    util_mod = types.ModuleType("sentence_transformers.util")
+    util_mod.cos_sim = lambda *a, **k: None
+    util_mod.semantic_search = lambda *a, **k: None
+    sys.modules["sentence_transformers.util"] = util_mod
+
 
 
 # =========================================
@@ -623,23 +648,70 @@ if pr_feature == "Sentiment":
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        import joblib, traceback
+        """
+        Robust loader untuk artefak joblib yang kadang gagal di Python 3.12
+        (mis. 'KeyError: 118', incompatibility tokenizers/transformers).
+        Strategi:
+          1) joblib.load biasa
+          2) joblib.load dengan mmap_mode='r'
+          3) pickle standar (encoding='latin1') sebagai fallback
+        Semua cabang memberikan pesan yang jelas & saran versi.
+        """
+        import os, joblib, pickle, io, traceback
         if not os.path.exists(path_joblib):
             raise FileNotFoundError(
                 f"File pipeline tidak ditemukan: {path_joblib}. "
                 "Pastikan sudah mengunggah 'sentiment_pipeline_sbert_linsvc.joblib'."
             )
+    
+        # --- helper untuk tulis pesan konsisten ---
+        def _compat_help(err: Exception, stage: str):
+            st.error(
+                f"Gagal membaca pipeline pada tahap **{stage}**.\n\n"
+                f"Detail: `{type(err).__name__}: {err}`"
+            )
+            st.caption(
+                "Kemungkinan penyebab:\n"
+                "• Artefak dipickle di environment berbeda (Python/Sklearn/Transformers/Tokenizers).\n"
+                "• Perubahan internal tokenizer (mis. `_pad_token` → `pad_token`).\n"
+                "• Object custom (SBERTEncoder) tak ditemukan saat unpickle.\n\n"
+                "Solusi cepat (disarankan): re-save pipeline ulang di environment target dg versi:\n"
+                "  sentence-transformers==2.2.2 | transformers==4.41.1 | tokenizers==0.13.3 |\n"
+                "  scikit-learn==1.3.2 | torch==2.2.2 | numpy==1.26.4\n"
+                "Lalu upload ulang file `sentiment_pipeline_sbert_linsvc.joblib`."
+            )
+            # tampilkan jejak ringkas
+            st.code("".join(traceback.format_exception_only(type(err), err)).strip())
+    
+        # --- 1) joblib biasa ---
         try:
             return joblib.load(path_joblib)
+        except KeyError as e:         # kasus yang sering muncul: KeyError: 118
+            _compat_help(e, "joblib.load (direct)")
         except Exception as e:
-            st.error("Gagal membaca pipeline (pickle incompatibility). "
-                     "Coba versi: sentence-transformers==2.2.2, transformers==4.41.1, "
-                     "tokenizers==0.13.3, scikit-learn==1.3.2, torch==2.2.2")
-            st.caption("Compat shims sudah diaktifkan di awal file. "
-                       "Jika tetap gagal, re-save pipeline dgn class & versi yang match.")
-            # opsional: tampilkan traceback ringkas untuk debugging
-            st.code("".join(traceback.format_exception_only(type(e), e)).strip())
-            raise
+            _compat_help(e, "joblib.load (direct)")
+    
+        # --- 2) joblib dengan mmap (kadang membantu file besar/kompresi lama) ---
+        try:
+            return joblib.load(path_joblib, mmap_mode="r")
+        except Exception as e:
+            _compat_help(e, "joblib.load (mmap_mode='r')")
+    
+        # --- 3) pickle standar fallback ---
+        try:
+            with open(path_joblib, "rb") as f:
+                raw = f.read()
+            bio = io.BytesIO(raw)
+            # encoding='latin1' sering dibutuhkan utk object numpy lama
+            obj = pickle.load(bio, encoding="latin1")
+            return obj
+        except Exception as e:
+            _compat_help(e, "pickle.load (encoding='latin1')")
+            # throw yang “bersih” agar mudah dilihat di Streamlit
+            raise RuntimeError(
+                "Pipeline tidak bisa dibuka di semua strategi loader. "
+                "Rekomendasi: re-train atau re-save pipeline di env target dg versi yang disarankan."
+            )
 
 
     def predict_sentiment(pipe, txt: str):
@@ -1569,23 +1641,71 @@ elif pr_feature == "Sentiment + Technical":
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
-        import joblib, traceback
+        """
+        Robust loader untuk artefak joblib yang kadang gagal di Python 3.12
+        (mis. 'KeyError: 118', incompatibility tokenizers/transformers).
+        Strategi:
+          1) joblib.load biasa
+          2) joblib.load dengan mmap_mode='r'
+          3) pickle standar (encoding='latin1') sebagai fallback
+        Semua cabang memberikan pesan yang jelas & saran versi.
+        """
+        import os, joblib, pickle, io, traceback
         if not os.path.exists(path_joblib):
             raise FileNotFoundError(
                 f"File pipeline tidak ditemukan: {path_joblib}. "
                 "Pastikan sudah mengunggah 'sentiment_pipeline_sbert_linsvc.joblib'."
             )
+    
+        # --- helper untuk tulis pesan konsisten ---
+        def _compat_help(err: Exception, stage: str):
+            st.error(
+                f"Gagal membaca pipeline pada tahap **{stage}**.\n\n"
+                f"Detail: `{type(err).__name__}: {err}`"
+            )
+            st.caption(
+                "Kemungkinan penyebab:\n"
+                "• Artefak dipickle di environment berbeda (Python/Sklearn/Transformers/Tokenizers).\n"
+                "• Perubahan internal tokenizer (mis. `_pad_token` → `pad_token`).\n"
+                "• Object custom (SBERTEncoder) tak ditemukan saat unpickle.\n\n"
+                "Solusi cepat (disarankan): re-save pipeline ulang di environment target dg versi:\n"
+                "  sentence-transformers==2.2.2 | transformers==4.41.1 | tokenizers==0.13.3 |\n"
+                "  scikit-learn==1.3.2 | torch==2.2.2 | numpy==1.26.4\n"
+                "Lalu upload ulang file `sentiment_pipeline_sbert_linsvc.joblib`."
+            )
+            # tampilkan jejak ringkas
+            st.code("".join(traceback.format_exception_only(type(err), err)).strip())
+    
+        # --- 1) joblib biasa ---
         try:
             return joblib.load(path_joblib)
+        except KeyError as e:         # kasus yang sering muncul: KeyError: 118
+            _compat_help(e, "joblib.load (direct)")
         except Exception as e:
-            st.error("Gagal membaca pipeline (pickle incompatibility). "
-                     "Coba versi: sentence-transformers==2.2.2, transformers==4.41.1, "
-                     "tokenizers==0.13.3, scikit-learn==1.3.2, torch==2.2.2")
-            st.caption("Compat shims sudah diaktifkan di awal file. "
-                       "Jika tetap gagal, re-save pipeline dgn class & versi yang match.")
-            # opsional: tampilkan traceback ringkas untuk debugging
-            st.code("".join(traceback.format_exception_only(type(e), e)).strip())
-            raise
+            _compat_help(e, "joblib.load (direct)")
+    
+        # --- 2) joblib dengan mmap (kadang membantu file besar/kompresi lama) ---
+        try:
+            return joblib.load(path_joblib, mmap_mode="r")
+        except Exception as e:
+            _compat_help(e, "joblib.load (mmap_mode='r')")
+    
+        # --- 3) pickle standar fallback ---
+        try:
+            with open(path_joblib, "rb") as f:
+                raw = f.read()
+            bio = io.BytesIO(raw)
+            # encoding='latin1' sering dibutuhkan utk object numpy lama
+            obj = pickle.load(bio, encoding="latin1")
+            return obj
+        except Exception as e:
+            _compat_help(e, "pickle.load (encoding='latin1')")
+            # throw yang “bersih” agar mudah dilihat di Streamlit
+            raise RuntimeError(
+                "Pipeline tidak bisa dibuka di semua strategi loader. "
+                "Rekomendasi: re-train atau re-save pipeline di env target dg versi yang disarankan."
+            )
+
 
 
     def predict_sentiment(pipe, txt: str):
