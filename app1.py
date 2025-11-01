@@ -174,6 +174,14 @@ globals()["_ENSURE_ST_ENCODER_OK"] = _ENSURE_ST_ENCODER_OK
 globals()["_ENSURE_PAD_TOKEN_FOR_ST_MODEL"] = _ENSURE_PAD_TOKEN_FOR_ST_MODEL
 globals()["_ENSURE_BERT_SDPA_FOR_ST"] = _ENSURE_BERT_SDPA_FOR_ST
 
+def _build_empty_table(d0, d1):
+    dates = pd.date_range(pd.to_datetime(d0), pd.to_datetime(d1), freq="D")
+    return pd.DataFrame({
+        "Date": dates.date,
+        "Sentiment Positive": 0,
+        "Sentiment Negative": 0,
+        "Sentiment Neutral":  0,
+    })
 
 # =========================================
 # PATH & THEME
@@ -1519,17 +1527,12 @@ else:
         st.write("---")
         st.subheader("🗓️ Assign Sentiment to Dates")
 
-        global_min, global_max = pr_date_range[0], pr_date_range[1]
+        # HAPUS baris pr_date_range lama tsb
         W = int(pr_window)
+        
+        # HAPUS definisi _build_empty_table di sini,
+        # karena sekarang sudah ada definisi GLOBAL (lihat langkah #1).
 
-        def _build_empty_table(d0, d1):
-            dates = pd.date_range(pd.to_datetime(d0), pd.to_datetime(d1), freq="D")
-            return pd.DataFrame({
-                "Date": dates.date,
-                "Sentiment Positive": 0,
-                "Sentiment Negative": 0,
-                "Sentiment Neutral":  0,
-            })
 
         win_start = pr_start
         win_end   = pr_end
