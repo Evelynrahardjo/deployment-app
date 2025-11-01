@@ -1036,7 +1036,6 @@ if pr_feature == "Sentiment":
     
     # Saat load:
     import joblib
-    pipe = _post_load_fix(joblib.load(PATH_PIPELINE))
 
 
     
@@ -1046,7 +1045,7 @@ if pr_feature == "Sentiment":
         import joblib, collections
         if not os.path.exists(path_joblib):
             raise FileNotFoundError(f"File pipeline tidak ditemukan: {path_joblib}")
-        pipe = joblib.load(path_joblib)
+        pipe = _post_load_fix(joblib.load(PATH_PIPELINE))
     
         # --- Post-load fix: cari semua objek yang punya ._encoder bertipe SentenceTransformer
         def _fix_obj(obj):
@@ -2013,7 +2012,7 @@ if pr_feature == "Sentiment + Technical":
         import joblib, collections
         if not os.path.exists(path_joblib):
             raise FileNotFoundError(f"File pipeline tidak ditemukan: {path_joblib}")
-        pipe = joblib.load(path_joblib)
+        pipe = _post_load_fix(joblib.load(PATH_PIPELINE))
     
         # --- Post-load fix: cari semua objek yang punya ._encoder bertipe SentenceTransformer
         def _fix_obj(obj):
@@ -3222,7 +3221,7 @@ if pr_feature == "Sentiment":
         import joblib, collections
         if not os.path.exists(path_joblib):
             raise FileNotFoundError(f"File pipeline tidak ditemukan: {path_joblib}")
-        pipe = joblib.load(path_joblib)
+        pipe = _post_load_fix(joblib.load(PATH_PIPELINE))
     
         # --- Post-load fix: cari semua objek yang punya ._encoder bertipe SentenceTransformer
         def _fix_obj(obj):
@@ -4155,7 +4154,7 @@ if pr_feature == "Sentiment + Technical":
         import joblib, collections
         if not os.path.exists(path_joblib):
             raise FileNotFoundError(f"File pipeline tidak ditemukan: {path_joblib}")
-        pipe = joblib.load(path_joblib)
+        pipe = _post_load_fix(joblib.load(PATH_PIPELINE))
     
         # --- Post-load fix: cari semua objek yang punya ._encoder bertipe SentenceTransformer
         def _fix_obj(obj):
