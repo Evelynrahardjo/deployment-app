@@ -1,5 +1,4 @@
-
-# %%writefile app.py
+%%writefile app.py
 # =========================================
 # IMPORTS
 # =========================================
@@ -595,28 +594,6 @@ if pr_feature == "Sentiment":
                 f"File pipeline tidak ditemukan: {path_joblib}. "
                 "Pastikan telah menyimpan/unggah '/content/sentiment_pipeline_sbert_linsvc.joblib'."
             )
-        # ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
-        import sys, types
-        
-        # 1) Shim untuk modul yang dihapus di sentence-transformers v3.x
-        if "sentence_transformers.model_card" not in sys.modules:
-            mod = types.ModuleType("sentence_transformers.model_card")
-            # Definisikan class yang dicari pickle lama
-            class SentenceTransformerModelCardData:
-                # Bisa kosong; cukup ada supaya unpickle lolos
-                def __init__(self, *args, **kwargs):
-                    for k, v in kwargs.items():
-                        setattr(self, k, v)
-            mod.SentenceTransformerModelCardData = SentenceTransformerModelCardData
-            sys.modules["sentence_transformers.model_card"] = mod
-        
-        # 2) (Opsional) Shim lain yang kadang muncul pada artefak lama
-        #    Hindari gagal import saat unpickle tokenizers / old paths
-        try:
-            import tokenizers  # memastikan tersedia
-        except Exception:
-            pass
-
         pipe = joblib.load(path_joblib)
         return pipe
 
