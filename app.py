@@ -587,6 +587,29 @@ if pr_feature == "Sentiment":
             return text
 
     @st.cache_resource(show_spinner=True)
+    # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
+    import sys, types
+    try:
+        import sentence_transformers.model_card  # ✅ kalau modulnya ada, lanjut normal
+    except Exception:
+        # ❌ kalau modul hilang, buat dummy module agar joblib.load tidak error
+        mc = types.ModuleType("sentence_transformers.model_card")
+    
+        class ModelCard:
+            def __init__(self, **kwargs):
+                for k, v in kwargs.items():
+                    setattr(self, k, v)
+    
+        # beberapa pickle lama pakai nama berbeda
+        class SentenceTransformerModelCard(ModelCard):
+            pass
+    
+        mc.ModelCard = ModelCard
+        mc.SentenceTransformerModelCard = SentenceTransformerModelCard
+        sys.modules["sentence_transformers.model_card"] = mc
+    # ==== END PATCH ====
+
+    
     def load_pipeline(path_joblib: str):
         import joblib
         if not os.path.exists(path_joblib):
@@ -1521,6 +1544,28 @@ elif pr_feature == "Sentiment + Technical":
             return tr.translate(text, dest="en").text
         except Exception:
             return text
+
+    # ==== COMPAT PATCH: fix untuk pickle lama yg refer ke sentence_transformers.model_card ====
+    import sys, types
+    try:
+        import sentence_transformers.model_card  # ✅ kalau modulnya ada, lanjut normal
+    except Exception:
+        # ❌ kalau modul hilang, buat dummy module agar joblib.load tidak error
+        mc = types.ModuleType("sentence_transformers.model_card")
+    
+        class ModelCard:
+            def __init__(self, **kwargs):
+                for k, v in kwargs.items():
+                    setattr(self, k, v)
+    
+        # beberapa pickle lama pakai nama berbeda
+        class SentenceTransformerModelCard(ModelCard):
+            pass
+    
+        mc.ModelCard = ModelCard
+        mc.SentenceTransformerModelCard = SentenceTransformerModelCard
+        sys.modules["sentence_transformers.model_card"] = mc
+    # ==== END PATCH ====
 
     @st.cache_resource(show_spinner=True)
     def load_pipeline(path_joblib: str):
