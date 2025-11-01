@@ -386,16 +386,28 @@ def prepare_sentiment_rolling(df_in, ticker, window):
     d = df_in.copy()
     if "Ticker" in d.columns:
         d = d[d["Ticker"] == ticker]
+
+    # Pastikan kolom sentimen ada → kalau tidak, isi 0
+    for c in ["Sentiment Positive", "Sentiment Negative", "Sentiment Neutral"]:
+        if c not in d.columns:
+            d[c] = 0
+
+    # Pastikan Date dalam datetime
+    d["Date"] = pd.to_datetime(d["Date"], errors="coerce")
+    d = d.dropna(subset=["Date"]).sort_values("Date")
+
     grp = d.groupby("Date", as_index=False).agg({
         "Sentiment Positive": "sum",
         "Sentiment Negative": "sum",
         "Sentiment Neutral":  "sum",
         "Adj Close": "mean"
     }).sort_values("Date")
+
     grp["Pos_roll"] = grp["Sentiment Positive"].rolling(window, min_periods=1).sum()
     grp["Neg_roll"] = grp["Sentiment Negative"].rolling(window, min_periods=1).sum()
     grp["Neu_roll"] = grp["Sentiment Neutral"].rolling(window, min_periods=1).sum()
     return grp
+
 
 def create_features_by_mode(data, window=14, mode="both"):
     data = data.sort_values("Date").reset_index(drop=True)
