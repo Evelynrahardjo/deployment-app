@@ -1,3 +1,24 @@
+
+# ==== Ultra-early compat patches for pickled pipelines (JANGAN HAPUS) ====
+import sys, types
+
+# 1) Shim utk artefak lama yg refer ke sentence_transformers.model_card
+if "sentence_transformers.model_card" not in sys.modules:
+    _mc = types.ModuleType("sentence_transformers.model_card")
+    class ModelCard: pass
+    _mc.ModelCard = ModelCard
+    sys.modules["sentence_transformers.model_card"] = _mc
+
+# 2) Shim utk kode lama yg memanggil huggingface_hub.cached_download
+try:
+    import huggingface_hub as _hf
+    if not hasattr(_hf, "cached_download") and hasattr(_hf, "hf_hub_download"):
+        def cached_download(*args, **kwargs):
+            return _hf.hf_hub_download(*args, **kwargs)
+        _hf.cached_download = cached_download
+except Exception:
+    pass
+
 # %%writefile app.py
 # =========================================
 # IMPORTS
