@@ -907,14 +907,15 @@ else:
                     st.warning("Tidak ada rentang baru untuk di-scrape (data sudah up to date).")
                     df_old.to_csv(PATH_OUT, index=False)
                     st.success(f"💾 Disalin sebagai `{PATH_OUT}` (tanpa penambahan).")
+     
                 else:
                     st.write(f"📆 Mengunduh data dari **{start_dt}** hingga **{end_dt}** ...")
                     end_dt_excl = end_dt + timedelta(days=1)
-
+                
                     data = yf.download(
-                        TICKERS,
-                        start=start_dt,            # boleh date langsung
-                        end=end_dt_excl,           # END = exclusive → tambahin 1 hari
+                        tickers=" ".join(TICKERS),   # ✅ lebih stabil daripada list
+                        start=str(start_dt),
+                        end=str(end_dt_excl),
                         interval="1d",
                         group_by="column",
                         auto_adjust=False,
@@ -922,28 +923,58 @@ else:
                         progress=False,
                         threads=False,
                     )
-
+                
                     if data is None or data.empty:
                         st.warning("⚠️ Tidak ada data baru untuk rentang tersebut.")
                         df_old.to_csv(PATH_OUT, index=False)
                         st.success(f"💾 Disalin sebagai `{PATH_OUT}` (tanpa penambahan).")
                     else:
+                        # ✅ Normalisasi output yfinance:
+                        # - Jika kolom MultiIndex: level0=OHLCV, level1=Ticker
+                        # - Jika single ticker: kolom flat
+                        if isinstance(data.columns, pd.MultiIndex):
+                            # data: index=Date, columns=(Field, Ticker)
+                            df_new = (
+                                data.swaplevel(axis=1)              # (Ticker, Field)
+                                    .sort_index(axis=1)
+                                    .stack(level=0)                 # index=(Date, Ticker)
+                                    .reset_index()
+                                    .rename(columns={"level_1": "Ticker"})
+                            )
+                        else:
+                            # single ticker fallback
+                            df_new = data.reset_index()
+                            df_new["Ticker"] = TICKERS[0]
+                
+                        # ✅ Standardize column names (yfinance kadang pakai 'Adj Close' kadang 'AdjClose')
+                        if "AdjClose" in df_new.columns and "Adj Close" not in df_new.columns:
+                            df_new.rename(columns={"AdjClose": "Adj Close"}, inplace=True)
+                
+                        # ✅ Kalau 'Adj Close' kosong/tidak ada, fallback ke 'Close'
+                        if "Adj Close" not in df_new.columns and "Close" in df_new.columns:
+                            df_new["Adj Close"] = df_new["Close"]
+                
+                        # ✅ Pastikan Date & sorting
+                        df_new["Date"] = pd.to_datetime(df_new["Date"], errors="coerce")
                         df_new = (
-                            data.stack(level=1)
-                                .reset_index()
-                                .rename(columns={"level_1": "Ticker"})
-                                .sort_values(["Ticker", "Date"])
-                                .reset_index(drop=True)
-                        )
-                        df_all = pd.concat([df_old, df_new], ignore_index=True, sort=False)
-                        df_all["Date"] = pd.to_datetime(df_all["Date"], errors="coerce")
-                        df_all = (
-                            df_all.dropna(subset=["Date"])
-                                  .drop_duplicates(subset=["Ticker", "Date"])
+                            df_new.dropna(subset=["Date"])
                                   .sort_values(["Ticker", "Date"])
                                   .reset_index(drop=True)
                         )
+                
+                        # ✅ Gabung dengan historis
+                        df_all = pd.concat([df_old, df_new], ignore_index=True, sort=False)
+                        df_all["Date"] = pd.to_datetime(df_all["Date"], errors="coerce")
+                
+                        df_all = (
+                            df_all.dropna(subset=["Date"])
+                                  .drop_duplicates(subset=["Ticker", "Date"], keep="last")
+                                  .sort_values(["Ticker", "Date"])
+                                  .reset_index(drop=True)
+                        )
+                
                         df_all.to_csv(PATH_OUT, index=False)
+                
                         st.success(
                             f"✅ Selesai. Ditambahkan periode "
                             f"{df_new['Date'].min().date()} → {df_new['Date'].max().date()} "
@@ -951,6 +982,7 @@ else:
                         )
                         st.caption(f"💾 Disimpan sebagai: `{PATH_OUT}`")
                         st.dataframe(df_new.tail(10), use_container_width=True, height=280)
+
             except Exception as e:
                 st.error(f"Terjadi error saat scraping: {e}")
 
