@@ -909,12 +909,20 @@ else:
                     st.success(f"💾 Disalin sebagai `{PATH_OUT}` (tanpa penambahan).")
                 else:
                     st.write(f"📆 Mengunduh data dari **{start_dt}** hingga **{end_dt}** ...")
+                    end_dt_excl = end_dt + timedelta(days=1)
+
                     data = yf.download(
                         TICKERS,
-                        start=datetime.combine(start_dt, datetime.min.time()),
-                        end=datetime.combine(end_dt, datetime.min.time()),
+                        start=start_dt,            # boleh date langsung
+                        end=end_dt_excl,           # END = exclusive → tambahin 1 hari
+                        interval="1d",
+                        group_by="column",
+                        auto_adjust=False,
+                        actions=False,
                         progress=False,
+                        threads=False,
                     )
+
                     if data is None or data.empty:
                         st.warning("⚠️ Tidak ada data baru untuk rentang tersebut.")
                         df_old.to_csv(PATH_OUT, index=False)
