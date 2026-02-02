@@ -912,16 +912,8 @@ else:
                     data = yf.download(
                         TICKERS,
                         start=datetime.combine(start_dt, datetime.min.time()),
-                        end_dt2 = end_dt + timedelta(days=1)
-                        data = yf.download(
-                            TICKERS,
-                            start=start_dt,
-                            end=end_dt2,
-                            interval="1d",
-                            auto_adjust=False,
-                            progress=False,
-                            threads=False,
-                        )
+                        end=datetime.combine(end_dt, datetime.min.time()),
+                        progress=False,
                     )
                     if data is None or data.empty:
                         st.warning("⚠️ Tidak ada data baru untuk rentang tersebut.")
